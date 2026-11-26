@@ -131,6 +131,7 @@ function tryAction() {
     player.stats.fed += 1;
     const was = world.fire.fuel;
     world.fire.fuel = Math.min(rules.fireMax, world.fire.fuel + rules.fuelPerWood);
+    hud.spendWood({ x: world.fire.x, y: 0.8, z: world.fire.z }, camera.cam);
     effects.spawn(world.fire.x, 1, world.fire.z, 0xffc25a, { n: 12, speed: 1.5, up: 5, life: 0.7, size: 0.12, grav: 2 });
     hud.popup(was <= 0 ? '불이 다시 붙었다!' : '+불', { x: world.fire.x, y: 2.2, z: world.fire.z }, camera.cam, 'fire');
     player.attackT = -1;
@@ -173,7 +174,12 @@ function resolveStrike() {
     camera.shake = Math.max(camera.shake, 0.25);
     if (got) {
       player.wood += got; player.stats.wood += got; player.stats.trees += 1;
-      hud.popup(`+${got} 장작`, { x: t.x, y: 2.6, z: t.z }, camera.cam, 'wood');
+      hud.popup(`+${got} 장작`, { x: t.x, y: 2.6, z: t.z }, camera.cam, 'wood big');
+      hud.collectWood(got, { x: t.x, y: 1.0, z: t.z }, camera.cam);
+      // chunky burst of wood bits + a firmer thump when the tree goes down
+      effects.spawn(t.x, 1.2, t.z, 0xb9783f, { n: 14, speed: 4.5, up: 5, life: 0.8, size: 0.18 });
+      effects.spawn(t.x, 2.2, t.z, 0x6fae4a, { n: 10, speed: 3, up: 2, life: 0.9, size: 0.14 });
+      camera.shake = Math.max(camera.shake, 0.55);
     }
     break; // one tree per swing
   }

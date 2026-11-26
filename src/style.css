@@ -91,6 +91,45 @@ html, body {
 .popup.wood { color: #ffd08a; }
 .popup.hurt { color: #ff7b7b; }
 .popup.fire { color: #ffcf5c; }
+.popup.big {
+  font-size: 26px; color: #ffe0a3;
+  -webkit-text-stroke: 1.5px #5e3517;
+  text-shadow: 0 3px 0 #5e3517, 0 0 14px rgba(255,170,60,.55);
+  animation: popBig 1.15s cubic-bezier(.2,.9,.3,1) forwards;
+}
+@keyframes popBig {
+  0% { opacity: 0; transform: translate(-50%, -20%) scale(.4); }
+  14% { opacity: 1; transform: translate(-50%, -90%) scale(1.45); }
+  26% { transform: translate(-50%, -100%) scale(.95); }
+  36% { transform: translate(-50%, -105%) scale(1.08); }
+  70% { opacity: 1; transform: translate(-50%, -150%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -210%) scale(.95); }
+}
+.fly-wood {
+  position: absolute; left: 0; top: 0; width: 26px; height: 18px; border-radius: 5px;
+  background: linear-gradient(180deg, #c98a4d 0 45%, #8a5328 45% 100%);
+  box-shadow: inset 0 0 0 2px #5e3517, 0 3px 6px rgba(0,0,0,.4);
+  will-change: transform;
+}
+.fly-wood::after {
+  content: ''; position: absolute; right: 2px; top: 3px; width: 10px; height: 10px; border-radius: 50%;
+  background: radial-gradient(circle, #f1c48a 0 30%, #d39a5c 32% 55%, #f1c48a 57%);
+  box-shadow: 0 0 0 1.5px #5e3517;
+}
+.hud-ring {
+  position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%;
+  border: 3px solid #ffd08a; animation: ring .45s ease-out forwards;
+}
+@keyframes ring { from { transform: scale(.5); opacity: 1; } to { transform: scale(3.2); opacity: 0; } }
+.res.bump { animation: resBump .32s cubic-bezier(.3,1.6,.5,1); }
+.res.bump b { color: #ffd08a; }
+.res.spend { animation: resSpend .25s ease-out; }
+@keyframes resBump {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.35); box-shadow: 0 0 0 3px rgba(255,208,138,.55), 0 0 18px rgba(255,170,60,.6); }
+  100% { transform: scale(1); }
+}
+@keyframes resSpend { 0% { transform: scale(1); } 40% { transform: scale(.88); } 100% { transform: scale(1); } }
 @keyframes pop {
   0% { opacity: 0; transform: translate(-50%, -30%) scale(.7); }
   15% { opacity: 1; transform: translate(-50%, -80%) scale(1.1); }
