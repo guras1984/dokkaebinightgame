@@ -51,6 +51,10 @@ export class Hud {
   update(s) {
     const e = this.el;
     e.hp.style.width = `${(s.hp / s.hpMax) * 100}%`;
+    $('water-fill').style.width = `${s.water}%`;
+    $('food-fill').style.width = `${s.food}%`;
+    $('need-water').classList.toggle('low', s.water < 25);
+    $('need-food').classList.toggle('low', s.food < 25);
     for (const kind of ['wood', 'stone', 'bead']) {
       const n = this.shownCount(kind, s.inv[kind]);
       if (this.shown[kind] !== n) { this.shown[kind] = n; $('res-' + kind).textContent = n; }
@@ -74,7 +78,8 @@ export class Hud {
     if (s.actionLabel !== this.lastAction) {
       e.actionLabel.textContent = s.actionLabel;
       e.action.classList.toggle('feed', s.actionLabel === '장작 넣기');
-      e.action.classList.toggle('open', s.actionLabel === '열기');
+      e.action.classList.toggle('open', s.actionLabel === '열기' || s.actionLabel === '따기');
+      e.action.classList.toggle('drink', s.actionLabel === '물 마시기');
       this.lastAction = s.actionLabel;
     }
     e.roll.classList.toggle('cool', s.rollCool);

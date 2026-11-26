@@ -20,6 +20,8 @@ export class Player {
     this.facing = Math.PI / 4;  // face the camera at the start
     this.hp = rules.playerHp;
     this.inv = emptyInventory();
+    this.water = 100;
+    this.food = 100;
     this.setAxe(false);
     this.attackT = -1;          // 0..1 while swinging
     this.attackHit = false;

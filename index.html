@@ -18,6 +18,10 @@
           <span class="hp-label">체력</span>
           <div class="bar"><i id="hp-fill"></i></div>
         </div>
+        <div class="needs">
+          <div class="need" id="need-water"><span class="need-icon water"></span><div class="bar tiny"><i id="water-fill"></i></div></div>
+          <div class="need" id="need-food"><span class="need-icon food"></span><div class="bar tiny"><i id="food-fill"></i></div></div>
+        </div>
         <div class="res-row">
           <div class="res" data-kind="wood"><span class="res-icon wood"></span><b id="res-wood">0</b></div>
           <div class="res" data-kind="stone"><span class="res-icon stone"></span><b id="res-stone">0</b></div>
@@ -53,7 +57,7 @@
         <button id="btn-action" class="round-btn big-btn"><span id="action-label">베기</span></button>
       </div>
     </div>
-    <div id="keys-hint" hidden>WASD 이동 · J 행동 · K 구르기 · 1~4 아이템 · C 만들기 · P 멈춤</div>
+    <div id="keys-hint" hidden>WASD 이동 · J 행동 · K 구르기 · 1~8 아이템 · C 만들기 · P 멈춤</div>
 
     <section id="craft" hidden>
       <div class="craft-head"><b>만들기</b><span class="craft-sub">모닥불 옆에서만</span><button id="craft-close" class="icon-btn" aria-label="닫기">✕</button></div>

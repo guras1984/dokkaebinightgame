@@ -14,6 +14,7 @@ export class Camp {
     this.chests = [];
     this.lanterns = [];
     this.fences = [];
+    this.wells = [];
     this.mats = {
       wood: lam(0x9a6234), woodDark: lam(0x6b3f1e), gold: lam(0xf1c24b),
       night: lam(0x27306a), nightBand: lam(0x7fd3ff),
@@ -35,8 +36,8 @@ export class Camp {
   reset() {
     for (const c of this.chests) this.removeChest(c);
     for (const l of this.lanterns) { this.group.remove(l.group); this.dropCols(l.cols); }
-    for (const f of this.fences) { this.group.remove(f.group); this.dropCols(f.cols); }
-    this.chests = []; this.lanterns = []; this.fences = [];
+    for (const f of [...this.fences, ...this.wells]) { this.group.remove(f.group); this.dropCols(f.cols); }
+    this.chests = []; this.lanterns = []; this.fences = []; this.wells = [];
     for (const l of this.lightPool) { l.intensity = 0; l.position.y = -50; }
   }
 
@@ -122,9 +123,10 @@ export class Camp {
     const R = rules.islandRadius - 0.8;
     if (Math.hypot(x, z) > R) return '바다 쪽에는 지을 수 없다';
     if (Math.hypot(x - this.world.fire.x, z - this.world.fire.z) < 1.8) return '모닥불과 너무 가깝다';
-    const pad = kind === 'lantern' ? 0.55 : 0.35;
+    const pad = kind === 'lantern' ? 0.55 : kind === 'well' ? 0.85 : 0.35;
     if (this.world.colliders.some((c) => Math.hypot(c.x - x, c.z - z) < c.r + pad)) return '자리가 막혀 있다';
     if (kind === 'lantern' && this.lanterns.length >= rules.lanternMax) return `석등은 ${rules.lanternMax}개까지`;
+    if (kind === 'well' && this.wells.length >= rules.wellMax) return `우물은 ${rules.wellMax}개까지`;
     if (kind === 'fence' && this.fences.length >= rules.fenceMax) return `울타리는 ${rules.fenceMax}개까지`;
     return null;
   }
@@ -153,6 +155,26 @@ export class Camp {
       const light = this.lightPool[this.lanterns.length];
       light.position.set(x, 1.4, z);
       this.lanterns.push({ x, z, group: g, lamp, ring, light, cols, lit: 0 });
+    } else if (kind === 'well') {
+      const m = this.mats;
+      const add = (geo, mat, px, py, pz) => { const o = new THREE.Mesh(geo, mat); o.position.set(px, py, pz); o.castShadow = true; g.add(o); return o; };
+      // stone ring
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const st = add(new THREE.BoxGeometry(0.42, 0.5, 0.3), i % 2 ? m.stone : m.stoneDark, Math.cos(a) * 0.58, 0.25, Math.sin(a) * 0.58);
+        st.rotation.y = -a;
+      }
+      const water = new THREE.Mesh(new THREE.CircleGeometry(0.48, 16), basic(0x3a9bd8));
+      water.rotation.x = -Math.PI / 2; water.position.y = 0.36; g.add(water);
+      // posts, roof and bucket
+      add(new THREE.BoxGeometry(0.12, 1.4, 0.12), m.fence, -0.62, 0.7, 0);
+      add(new THREE.BoxGeometry(0.12, 1.4, 0.12), m.fence, 0.62, 0.7, 0);
+      add(new THREE.BoxGeometry(1.5, 0.1, 0.9), m.woodDark, 0, 1.45, 0).rotation.z = 0.0;
+      add(new THREE.BoxGeometry(1.2, 0.08, 0.08), m.wood, 0, 1.2, 0);
+      add(new THREE.BoxGeometry(0.24, 0.22, 0.24), m.wood, 0.25, 0.85, 0);
+      const col = { x, z, r: 0.75 };
+      cols.push(col);
+      this.wells.push({ x, z, group: g, cols });
     } else {
       // fence segment perpendicular to where the player faces
       g.rotation.y = facing;  // local x (the rails) ends up across the facing direction
@@ -176,6 +198,8 @@ export class Camp {
     this.grow = this.grow || [];
     this.grow.push({ g, t: 0 });
   }
+
+  nearWell(x, z, d = 1.8) { return this.wells.some((w) => Math.hypot(w.x - x, w.z - z) < d); }
 
   /** circles monsters cannot enter */
   safeZones(fireR) {

@@ -6,21 +6,26 @@ export const ITEMS = {
   wood:    { name: '장작', res: true },
   stone:   { name: '돌', res: true },
   bead:    { name: '도깨비 구슬', res: true },
+  berry:   { name: '산딸기', use: true, hint: '배고픔 조금' },
+  meat:    { name: '구운 고기', use: true, hint: '배고픔 많이' },
+  rawmeat: { name: '날고기', use: true, hint: '모닥불 옆에서 굽기' },
   herb:    { name: '약초', use: true, hint: '체력 회복' },
   charm:   { name: '부적', use: true, hint: '도깨비 쫓기' },
   lantern: { name: '석등', use: true, hint: '앞에 설치' },
+  well:    { name: '우물', use: true, hint: '앞에 설치' },
   fence:   { name: '울타리', use: true, hint: '앞에 설치' },
 };
-export const USE_ORDER = ['herb', 'charm', 'lantern', 'fence'];
+export const USE_ORDER = ['berry', 'meat', 'rawmeat', 'herb', 'charm', 'lantern', 'fence', 'well'];
 
 export function emptyInventory() {
-  return { wood: 0, stone: 0, bead: 0, herb: 0, charm: 0, lantern: 0, fence: 0 };
+  return { wood: 0, stone: 0, bead: 0, berry: 0, meat: 0, rawmeat: 0, herb: 0, charm: 0, lantern: 0, fence: 0, well: 0 };
 }
 
 export const RECIPES = [
   { id: 'fire2', name: '모닥불 키우기 Ⅱ', desc: '불이 더 크고 오래 간다', cost: { wood: 8, stone: 6 }, show: (s) => s.fireLevel === 0 },
   { id: 'fire3', name: '모닥불 키우기 Ⅲ', desc: '가장 큰 불. 밤이 든든하다', cost: { wood: 14, stone: 12, bead: 4 }, show: (s) => s.fireLevel === 1 },
   { id: 'lantern', name: '석등', desc: '밤새 빛나는 작은 안전지대 (최대 4)', cost: { stone: 5, wood: 2 }, gives: 'lantern', show: () => true },
+  { id: 'well', name: '우물', desc: '야영지에서 물을 마신다 (최대 2)', cost: { stone: 8, wood: 4 }, gives: 'well', show: () => true },
   { id: 'fence', name: '나무 울타리 ×2', desc: '도깨비 길을 막는 벽', cost: { wood: 3 }, gives: 'fence', amount: 2, show: () => true },
   { id: 'axe', name: '쇠도끼', desc: '두 배로 세게 벤다', cost: { stone: 8, bead: 3 }, show: (s) => !s.ironAxe },
   { id: 'charm', name: '부적', desc: '주변 도깨비를 한 번에 쫓아낸다', cost: { bead: 2, wood: 1 }, gives: 'charm', show: () => true },
@@ -47,6 +52,8 @@ export function rollLoot(kind, night) {
     add('herb', Math.random() < 0.45 ? 1 : 0);
     add('charm', Math.random() < 0.2 ? 1 : 0);
     add('bead', Math.random() < 0.35 ? 1 : 0);
+    add('berry', Math.random() < 0.5 ? ri(2, 3) : 0);
+    add('meat', Math.random() < 0.2 ? 1 : 0);
   }
   return out;
 }

@@ -15,6 +15,7 @@ export class World {
     this.colliders = [];   // static circles {x,z,r}
     this.trees = [];
     this.rocks = [];
+    this.bushes = [];
     this.group = new THREE.Group();
     scene.add(this.group);
     const rand = rng(1984);
@@ -24,6 +25,7 @@ export class World {
     this.buildFire();
     this.buildTrees(rand);
     this.buildRocks(rand);
+    this.buildBushes(rand);
     this.buildDecor(rand);
   }
 
@@ -207,6 +209,59 @@ export class World {
       this.rocks.push({ mesh: m, x, z, r: col.r, col, size: s, hp: rules.rockHp, alive: true, shake: 0, gone: -1, baseY: m.position.y });
     }
   }
+
+  buildBushes(rand) {
+    const leaf = [lam(0x3f8f3a), lam(0x4fa647)];
+    const berryMat = lam(0xe8344e);
+    const R = rules.islandRadius - 3;
+    let tries = 0;
+    while (this.bushes.length < rules.bushes && tries++ < 400) {
+      const a = rand() * Math.PI * 2, r = 5 + rand() * (R - 5);
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (this.colliders.some((c) => Math.hypot(c.x - x, c.z - z) < c.r + 1.4)) continue;
+      const g = new THREE.Group();
+      g.position.set(x, 0, z);
+      [[0, 0.32, 0, 0.8], [0.32, 0.26, 0.15, 0.55], [-0.28, 0.24, -0.12, 0.6]].forEach(([bx, by, bz, sz], i) => {
+        const b = new THREE.Mesh(new THREE.BoxGeometry(sz, sz * 0.8, sz), leaf[i % 2]);
+        b.position.set(bx, by, bz); b.rotation.y = i; b.castShadow = true; g.add(b);
+      });
+      const berries = new THREE.Group();
+      for (let k = 0; k < 6; k++) {
+        const ang = k * 1.05 + rand();
+        const be = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.12), berryMat);
+        be.position.set(Math.cos(ang) * 0.38, 0.3 + rand() * 0.3, Math.sin(ang) * 0.38);
+        berries.add(be);
+      }
+      g.add(berries);
+      this.group.add(g);
+      const col = { x, z, r: 0.45 };
+      this.colliders.push(col);
+      this.bushes.push({ x, z, r: col.r, group: g, berries, ripe: true, shake: 0 });
+    }
+  }
+
+  /** pick berries: returns how many */
+  pickBush(b) {
+    if (!b.ripe) return 0;
+    b.ripe = false;
+    b.berries.visible = false;
+    b.shake = 1;
+    return 2 + (Math.random() < 0.4 ? 1 : 0);
+  }
+
+  updateBushes(dt) {
+    for (const b of this.bushes) {
+      if (b.shake > 0) {
+        b.shake = Math.max(0, b.shake - dt * 4);
+        b.group.scale.set(1 + Math.sin(b.shake * 20) * 0.08 * b.shake, 1 - Math.sin(b.shake * 20) * 0.06 * b.shake, 1);
+      }
+    }
+  }
+
+  refillBushes() { for (const b of this.bushes) { b.ripe = true; b.berries.visible = true; } }
+
+  /** standing at the water's edge? */
+  atShore(x, z) { return Math.hypot(x, z) > rules.islandRadius - 1.2; }
 
   /** Hit a rock. Returns stone gained (0 if not broken). */
   mineRock(rock, dmg = 1) {

@@ -42,6 +42,16 @@ html, body {
 .hud-left, .hud-right { display: flex; align-items: center; gap: 8px; }
 .hud-left { flex-direction: column; align-items: flex-start; gap: 6px; }
 .res-row { display: flex; gap: 6px; }
+.needs { display: flex; gap: 6px; }
+.need { display: flex; align-items: center; gap: 6px; padding: 4px 9px 4px 7px; border-radius: 999px; background: var(--panel); border: 1px solid var(--panel-line); }
+.need.low { animation: needLow .8s ease-in-out infinite; border-color: #ff6b6b; }
+@keyframes needLow { 50% { background: rgba(160, 30, 40, .85); } }
+.bar.tiny { width: 52px; height: 7px; }
+#water-fill { background: linear-gradient(90deg, #3b8bff, #7fd3ff); }
+#food-fill { background: linear-gradient(90deg, #e0772f, #ffc066); }
+.need-icon { width: 13px; height: 14px; display: inline-block; }
+.need-icon.water { background: radial-gradient(circle at 50% 68%, #7fd3ff 0 46%, transparent 48%), linear-gradient(135deg, transparent 50%, #7fd3ff 50%) 50% 18% / 7px 7px no-repeat; transform: rotate(0deg); }
+.need-icon.food { background: radial-gradient(circle at 42% 42%, #d9783a 0 45%, transparent 47%), linear-gradient(#f2ede4, #f2ede4) 78% 82% / 4px 6px no-repeat; }
 .res-row .res { padding: 4px 9px 4px 6px; gap: 6px; }
 .hud-right { justify-content: flex-end; }
 
@@ -104,6 +114,8 @@ html, body {
 }
 .popup.big.fire { color: #ffd65a; }
 .popup.big.hurt { color: #ff6b6b; -webkit-text-stroke-color: #4a0a0a; text-shadow: 0 3px 0 #4a0a0a, 0 0 14px rgba(255,40,40,.5); }
+.popup.water { color: #9fdcff; -webkit-text-stroke-color: #0d2a52; text-shadow: 0 3px 0 #0d2a52; }
+.popup.food { color: #ffc066; }
 .popup.heal { color: #8dff8a; -webkit-text-stroke-color: #1d4a1a; text-shadow: 0 3px 0 #1d4a1a; }
 @keyframes popBig {
   0% { opacity: 0; transform: translate(-50%, -20%) scale(.4); }
@@ -150,6 +162,12 @@ html, body {
 
 /* item icons (also used by flying pickups) */
 .item-icon { width: 26px; height: 26px; display: block; position: relative; }
+.item-icon.berry, .fly-berry::before { background: radial-gradient(circle at 30% 60%, #e8344e 0 22%, transparent 24%), radial-gradient(circle at 66% 62%, #d42a44 0 22%, transparent 24%), radial-gradient(circle at 48% 32%, #ff4f66 0 22%, transparent 24%), linear-gradient(#3f8f3a, #3f8f3a) 50% 8% / 50% 14% no-repeat; }
+.item-icon.meat, .fly-meat::before { background: radial-gradient(ellipse 42% 34% at 44% 46%, #a8552a 0 90%, transparent 92%), linear-gradient(#f2ede4, #f2ede4) 82% 80% / 22% 18% no-repeat; }
+.item-icon.rawmeat, .fly-rawmeat::before { background: radial-gradient(ellipse 42% 34% at 44% 46%, #f08a8a 0 90%, transparent 92%), linear-gradient(#f2ede4, #f2ede4) 82% 80% / 22% 18% no-repeat; }
+.item-icon.well, .fly-well::before { background: linear-gradient(#6b3f1e, #6b3f1e) 50% 6% / 100% 14% no-repeat, linear-gradient(#b07a45, #b07a45) 12% 50% / 10% 60% no-repeat, linear-gradient(#b07a45, #b07a45) 88% 50% / 10% 60% no-repeat, linear-gradient(#8f8c86, #8f8c86) 50% 100% / 90% 34% no-repeat; }
+.fly-berry, .fly-meat, .fly-rawmeat, .fly-well { width: 26px; height: 26px; }
+.fly-berry::before, .fly-meat::before, .fly-rawmeat::before, .fly-well::before { content: ''; position: absolute; inset: 0; }
 .item-icon.herb, .fly-herb::before { background: radial-gradient(ellipse 40% 55% at 35% 55%, #6fd36a 60%, transparent 62%), radial-gradient(ellipse 40% 55% at 66% 45%, #4fae54 60%, transparent 62%), linear-gradient(#3d7a2c, #3d7a2c) 50% 100% / 3px 50% no-repeat; }
 .item-icon.charm, .fly-charm::before { background: linear-gradient(#c9413a, #c9413a) 50% 30% / 3px 40% no-repeat, linear-gradient(#c9413a, #c9413a) 50% 50% / 50% 3px no-repeat, linear-gradient(180deg, #ffe27a, #f2c14b); border-radius: 3px; box-shadow: inset 0 0 0 2px #b8860b; transform: scale(.75, 1); }
 .item-icon.lantern, .fly-lantern::before { background: linear-gradient(#b9b6ae, #b9b6ae) 50% 8% / 90% 16% no-repeat, linear-gradient(#ffd07a, #ffd07a) 50% 38% / 50% 28% no-repeat, linear-gradient(#8f8c86, #8f8c86) 50% 100% / 26% 46% no-repeat; }
@@ -196,11 +214,13 @@ html, body {
 .big-btn.feed { background: linear-gradient(180deg, #ffe08a, #ff7a1a); }
 .small-btn { width: 62px; height: 62px; font-size: 13px; background: linear-gradient(180deg, #c9d6ff, #8fa7ff); color: #121a3d; margin-bottom: 8px; }
 .small-btn.cool { opacity: .5; }
+.big-btn.drink { background: linear-gradient(180deg, #bfe8ff, #4fa8ff); color: #0d2a52; }
 .big-btn.open { background: linear-gradient(180deg, #fff2a8, #f1c24b); }
 
 #item-bar {
   position: absolute; right: calc(18px + var(--safe-r)); bottom: calc(126px + var(--safe-b));
-  display: flex; gap: 8px; pointer-events: none; min-width: 10px; min-height: 10px;
+  display: flex; flex-wrap: wrap-reverse; justify-content: flex-end; gap: 8px; max-width: 248px;
+  pointer-events: none; min-width: 10px; min-height: 10px;
 }
 .item-btn {
   pointer-events: auto; position: relative; width: 56px; height: 60px; border-radius: 14px; border: 1px solid var(--panel-line);

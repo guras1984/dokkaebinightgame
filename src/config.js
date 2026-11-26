@@ -74,6 +74,17 @@ export const rules = {
   dayChests: 2,
   nightChestAt: 0.25,   // night progress when the glowing chest appears
   raidAt: 0.55,         // night progress of the raid (from night 2)
+  // --- survival needs ---
+  waterDrain: 0.3,      // per second (full → empty in ~5.5 min)
+  foodDrain: 0.22,      // per second (full → empty in ~7.5 min)
+  needDamage: 1.2,      // hp/s while water or food is empty
+  drinkAmount: 35,
+  berryFood: 14,
+  meatFood: 45,
+  rawMeatFood: 12,
+  bushes: 11,
+  rabbits: 5,
+  wellMax: 2,
   hitStop: 0.05,
   killStop: 0.09,
 };
