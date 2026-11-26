@@ -144,7 +144,7 @@ export function buildTunePanel() {
   panel.hidden = false;
   const labels = {
     moveSpeed: '이동 속도', accel: '가속', decel: '감속', turnSpeed: '회전 속도',
-    rollSpeed: '구르기 속도', rollTime: '구르기 시간', rollCooldown: '구르기 대기',
+    rollSpeed: '구르기 속도', rollTime: '구르기 시간', rollCooldown: '구르기 대기', rollChain: '연속 구르기 횟수',
     attackTime: '도끼질 시간', attackRange: '도끼 사거리',
     stride: '보폭(발 맞춤)', swing: '팔다리 흔들기', bob: '통통 튐', lean: '앞으로 기울기',
     camDistance: '카메라 거리', camPitch: '카메라 각도', camFollow: '카메라 따라오기',

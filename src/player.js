@@ -23,6 +23,8 @@ export class Player {
     this.attackHit = false;
     this.rollT = -1;
     this.rollCool = 0;
+    this.rollChain = 0;         // how many rolls in the current chain
+    this.rollQueued = false;    // roll pressed again mid-roll → chain into another
     this.rollDir = new THREE.Vector3();
     this.hurtT = 0;             // time since last hurt
     this.invuln = 0;
@@ -46,9 +48,22 @@ export class Player {
   }
 
   startRoll(dir) {
-    if (this.rolling || this.rollCool > 0 || this.dead) return false;
+    if (this.dead) return false;
+    if (this.rolling) {
+      // buffer the press; the next roll starts the moment this one lands
+      if (this.rollT > 0.25 && this.rollChain < tune.rollChain) this.rollQueued = true;
+      return false;
+    }
+    if (this.rollCool > 0) return false;
+    this.rollChain = 1;
+    this.beginRoll(dir);
+    return true;
+  }
+
+  beginRoll(dir) {
     this.attackT = -1;
     this.rollT = 0;
+    this.rollQueued = false;
     if (dir.lengthSq() < 0.01) dir.set(Math.sin(this.facing), 0, Math.cos(this.facing));
     this.rollDir.copy(dir).normalize();
     this.facing = Math.atan2(this.rollDir.x, this.rollDir.z);
@@ -90,7 +105,16 @@ export class Player {
       this.rollT += dt / tune.rollTime;
       const s = tune.rollSpeed * (1 - this.rollT * 0.55);
       this.vel.set(this.rollDir.x * s, 0, this.rollDir.z * s);
-      if (this.rollT >= 1) { this.rollT = -1; this.rollCool = tune.rollCooldown; this.vel.multiplyScalar(0.45); }
+      if (this.rollT >= 1) {
+        if (this.rollQueued) {
+          // chain: roll again toward wherever the stick points now
+          this.rollChain += 1;
+          this.beginRoll(wish.clone());
+        } else {
+          this.rollT = -1; this.rollChain = 0;
+          this.rollCool = tune.rollCooldown; this.vel.multiplyScalar(0.45);
+        }
+      }
     } else {
       // slower while swinging so the chop feels planted
       const slow = this.attacking ? 0.35 : 1;

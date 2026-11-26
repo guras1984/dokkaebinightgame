@@ -6,8 +6,9 @@ export const tune = {
   decel: 26,           // how fast we stop
   turnSpeed: 16,       // how fast the body turns toward the move direction
   // roll
-  rollSpeed: 11,
-  rollTime: 0.4,
+  rollSpeed: 11.5,
+  rollTime: 0.5,
+  rollChain: 3,       // rolls in a row before the cooldown kicks in
   rollCooldown: 0.45,
   // attack
   attackTime: 0.38,
@@ -25,7 +26,7 @@ export const tune = {
 
 export const tuneRanges = {
   moveSpeed: [2, 10, 0.1], accel: [5, 80, 1], decel: [5, 80, 1], turnSpeed: [3, 40, 0.5],
-  rollSpeed: [4, 20, 0.5], rollTime: [0.2, 0.8, 0.02], rollCooldown: [0, 1.5, 0.05],
+  rollSpeed: [4, 20, 0.5], rollTime: [0.2, 0.8, 0.02], rollChain: [1, 6, 1], rollCooldown: [0, 1.5, 0.05],
   attackTime: [0.2, 0.8, 0.02], attackRange: [1, 3, 0.05],
   stride: [1, 5, 0.1], swing: [0.2, 1.4, 0.05], bob: [0, 0.2, 0.01], lean: [0, 0.4, 0.01],
   camDistance: [10, 32, 0.5], camPitch: [30, 75, 1], camFollow: [1, 20, 0.5],
