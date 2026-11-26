@@ -76,6 +76,23 @@ function showBest() {
 }
 showBest();
 
+// ---------- difficulty: 쉬움 is for kids and first-timers ----------
+let mode = store.get('dokkaebi.mode') || 'easy';
+const EASY = () => mode === 'easy';
+const M = () => (EASY()
+  ? { dmg: 0.55, need: 0.55, burn: 0.75, dread: 0.45, keepSave: true }
+  : { dmg: 1, need: 1, burn: 1, dread: 1, keepSave: false });
+function showMode() {
+  document.querySelectorAll('.mode-pick button').forEach((b) => b.classList.toggle('on', b.dataset.mode === mode));
+  $('mode-desc').textContent = EASY()
+    ? '도깨비가 약하게 때리고, 배고픔이 천천히. 쓰러져도 그날 아침부터 다시'
+    : '원래 세기. 쓰러지면 처음부터';
+}
+document.querySelectorAll('.mode-pick button').forEach((b) => {
+  b.onclick = () => { mode = b.dataset.mode; store.set('dokkaebi.mode', mode); showMode(); };
+});
+showMode();
+
 // ---------- save: written every dawn, removed when you fall ----------
 const SAVE_KEY = 'dokkaebi.save';
 function readSave() {
@@ -83,7 +100,7 @@ function readSave() {
 }
 function saveGame() {
   store.set(SAVE_KEY, JSON.stringify({
-    v: 1, day, inv: player.inv, ironAxe: player.ironAxe, axeLevel: player.axeLevel, armor: player.armor, hp: Math.round(player.hp),
+    v: 1, day, mode, inv: player.inv, ironAxe: player.ironAxe, axeLevel: player.axeLevel, armor: player.armor, hp: Math.round(player.hp),
     villagers: village.inCamp.map((p) => p.def.id),
     water: Math.round(player.water), food: Math.round(player.food),
     fireLv: world.fire.level, fuel: Math.round(world.fire.fuel), stats: player.stats, camp: camp.serialize(),
@@ -129,6 +146,7 @@ function startGame(save = null) {
   spawnDayChests(true);
   if (save) {
     day = save.day;
+    if (save.mode) { mode = save.mode; showMode(); }
     Object.assign(player.inv, save.inv);
     player.setAxe(save.axeLevel ?? (save.ironAxe ? 1 : 0));
     player.setArmor(!!save.armor);
@@ -141,6 +159,7 @@ function startGame(save = null) {
     hud.banner(`${day}일째 아침`, '이어서 버텨라', 2.6);
     return;
   }
+  saveGame(); // morning of day 1 is a checkpoint too
   const intro = () => {
     hud.banner('1일째 아침', '백 일 밤을 버텨라', 2.6);
     setTimeout(() => { if (state === 'playing' && day === 1) hud.toast('섬 어딘가 노란 ! 표시: 갇힌 사람이 있다', 3.4); }, 2600);
@@ -182,7 +201,12 @@ function setPaused(p) {
 function endGame(won) {
   state = 'over';
   sfx(won ? 'dawn' : 'lose');
-  try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ }
+  if (!M().keepSave || won) { try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ } }
+  const sv = readSave();
+  $('retry-btn').hidden = won || !sv;
+  if (sv && !won) $('retry-btn').textContent = `${sv.day}일째 아침부터 다시`;
+  $('again-btn').textContent = sv && !won ? '처음부터' : '다시 하기';
+  $('again-btn').className = sv && !won ? 'ghost' : 'primary';
   showContinue();
   showControls(false);
   hud.show(false);
@@ -244,6 +268,7 @@ function morningGifts() {
 $('start-btn').onclick = () => startGame();
 $('continue-btn').onclick = () => startGame(readSave());
 $('again-btn').onclick = () => startGame();
+$('retry-btn').onclick = () => startGame(readSave());
 $('pause-btn').onclick = () => setPaused(true);
 const muteBtn = $('mute-btn');
 const showMute = () => muteBtn.classList.toggle('off', isMuted());
@@ -583,6 +608,42 @@ function useItem(id) {
   }
 }
 
+/** "지금 할 일": one short goal + where it is, so first-timers (and kids) always know what to do */
+function currentGoal(phase, inLight, fireR) {
+  const P = player.pos;
+  const fire = { x: world.fire.x, z: world.fire.z };
+  const near = (list, f = () => true) => {
+    let best = null, bd = 1e9;
+    for (const o of list) { if (!f(o)) continue; const x = o.x ?? o.pos.x, z = o.z ?? o.pos.z, d = Math.hypot(x - P.x, z - P.z); if (d < bd) { bd = d; best = { x, z }; } }
+    return best;
+  };
+  const night = phase === 'night';
+  if (night && !inLight) return { text: '불빛 안으로 돌아가!', target: fire, urgent: true };
+  if (world.fire.fuel < 15 && player.wood > 0) return { text: '모닥불이 꺼져 간다! 장작 넣기', target: fire, urgent: true };
+  const follower = village.people.find((v) => v.state === 'follow');
+  if (follower) return { text: `${follower.def.name}을(를) 모닥불까지 데려가기`, target: fire };
+  if (night) return { text: '불빛 안에서 새벽까지 버티기', target: null };
+  if (player.water < 30) return { text: '물 마시기 (섬 가장자리 물가)', target: (() => { const d = Math.hypot(P.x, P.z) || 1; return { x: P.x / d * (rules.islandRadius - 0.6), z: P.z / d * (rules.islandRadius - 0.6) }; })(), urgent: player.water < 12 };
+  if (player.food < 30) {
+    if (player.inv.meat || player.inv.berry) return { text: '아이템 칸에서 먹을 것 누르기', target: null, urgent: player.food < 12 };
+    return { text: '빨간 열매 덤불에서 산딸기 따기', target: near(world.bushes, (b) => b.ripe), urgent: player.food < 12 };
+  }
+  const late = phase === 'dusk' || (phase === 'day' && daynight.remaining() < 35);
+  if (late && player.wood > 0 && world.fire.fuel < world.fire.max * 0.7) return { text: '해가 진다! 모닥불에 장작 넣기', target: fire, urgent: true };
+  if (late) return { text: '곧 밤! 모닥불 옆으로', target: fire, urgent: phase === 'dusk' };
+  const guarded = village.lairs.find((l) => l.state === 'guarded');
+  if (guarded && Math.hypot(guarded.x - P.x, guarded.z - P.z) < 16) return { text: '소굴을 지키는 도깨비 물리치기', target: guarded };
+  const cleared = village.lairs.find((l) => l.state === 'cleared');
+  if (cleared) return { text: `우리에 갇힌 ${cleared.def.name} 구하기`, target: cleared };
+  if (player.wood < 4) return { text: '나무를 베어 장작 모으기', target: near(world.trees, (t) => t.alive) };
+  const open = village.lairs.find((l) => l.state === 'open');
+  if (open) return { text: `노란 ! 를 찾아 ${open.def.name} 구하러 가기`, target: open };
+  const chest = near(camp.chests, (c) => !c.opened && c.kind === 'day');
+  if (chest) return { text: '숲속 궤짝 찾아 열기', target: chest };
+  if (player.inv.stone < 5) return { text: '바위를 캐서 돌 모으기', target: near(world.rocks, (r) => r.alive) };
+  return { text: '장작을 넉넉히 모아 밤 준비하기 (만들기도 해 보자)', target: null };
+}
+
 function updateTorch(time, darkness) {
   if (!torchFlame) {
     // flame on a stick in the free (left) hand
@@ -733,7 +794,7 @@ function tick(dt) {
   world.water.material.color.copy(daynight.col.water);
 
   // fire burns down
-  const burn = phase === 'night' ? rules.burnNight : phase === 'dusk' ? (rules.burnDay + rules.burnNight) / 2 : rules.burnDay;
+  const burn = (phase === 'night' ? rules.burnNight : phase === 'dusk' ? (rules.burnDay + rules.burnNight) / 2 : rules.burnDay) * M().burn;
   if (world.fire.fuel > 0) {
     world.fire.fuel = Math.max(0, world.fire.fuel - burn * gdt);
     if (world.fire.fuel === 0) { hud.toast('모닥불이 꺼졌다! 장작을 넣어!', 3); camera.shake = 0.5; sfx('fireOut'); }
@@ -759,8 +820,8 @@ function tick(dt) {
   if (inLight && player.hurtT > 3 && player.hp < rules.playerHp) player.hp = Math.min(rules.playerHp, player.hp + regen * dt);
 
   // thirst and hunger
-  player.water = Math.max(0, player.water - rules.waterDrain * gdt);
-  player.food = Math.max(0, player.food - rules.foodDrain * gdt);
+  player.water = Math.max(0, player.water - rules.waterDrain * M().need * gdt);
+  player.food = Math.max(0, player.food - rules.foodDrain * M().need * gdt);
   if ((player.water <= 0 || player.food <= 0) && !player.dead) {
     player.hp = Math.max(0, player.hp - rules.needDamage * gdt * ((player.water <= 0) + (player.food <= 0)));
     if (player.hp <= 0) player.dead = true;
@@ -786,11 +847,11 @@ function tick(dt) {
       beat('slamTip', '대장이 땅을 치자 불이 흔들린다! 나가서 싸우자', 3.2);
     }
     if (e.type === 'summon') { monsters.summon(c, day, e.m.pos.x, e.m.pos.z); if (near) sfx('drum'); }
-    if (e.type === 'hitPlayer' && player.hurt(e.m.damage, e.m.pos.x, e.m.pos.z)) {
+    if (e.type === 'hitPlayer' && player.hurt(Math.max(1, Math.round(e.m.damage * M().dmg)), e.m.pos.x, e.m.pos.z)) {
       sfx('hurt');
       camera.shake = 1;
       hitStop = 0.07;
-      hud.popup(`-${e.m.damage}`, { x: player.pos.x, y: 2.4, z: player.pos.z }, camera.cam, 'hurt big');
+      hud.popup(`-${player.lastDamage}`, { x: player.pos.x, y: 2.4, z: player.pos.z }, camera.cam, 'hurt big');
     } else if (e.type === 'stomp') {
       const d = Math.hypot(e.m.pos.x - player.pos.x, e.m.pos.z - player.pos.z);
       camera.shake = Math.max(camera.shake, Math.max(0, 1 - d / 12));
@@ -798,8 +859,8 @@ function tick(dt) {
   }
   effects.update(dt);
   critters.update(dt, player, world, darkness > 0.5);
-  daynight.dread = dreadFor(day);
-  if (eyes.update(dt, { darkness, dread: daynight.dread, look: player.pos, zones: c.zones, camera: camera.cam }) === 'eyes' && Math.random() < 0.5) sfx(Math.random() < 0.5 ? 'whisper' : 'laugh', 0, 0.8 + Math.random() * 0.5);
+  daynight.dread = dreadFor(day) * M().dread;
+  if (eyes.update(dt, { darkness, dread: daynight.dread, look: player.pos, zones: c.zones, camera: camera.cam }) === 'eyes' && !EASY() && Math.random() < 0.5) sfx(Math.random() < 0.5 ? 'whisper' : 'laugh', 0, 0.8 + Math.random() * 0.5);
   hud.setNightGloom(darkness * (0.35 + daynight.dread * 0.55));
   world.updateBushes(dt);
   if (blastT >= 0) {
@@ -815,14 +876,15 @@ function tick(dt) {
   const bossNight = day % rules.bossEvery === 0;
   if (phase === 'night' && !announced.nightIntro) {
     announced.nightIntro = true;
-    const dr = dreadFor(day);
+    const dr = dreadFor(day) * M().dread;
     const fr = world.fireRadius();
     eyes.ring(world.fire.x, world.fire.z, fr + 0.8, fr + 3.2, Math.round(5 + dr * 10), dr > 0.5);
     if (day >= 3 || bossNight) {
       // the scary card: black flash, flickering red title, an omen, a cackle in the dark
       const omen = bossNight ? '대장이 깨어났다. 오늘 밤은 다르다' : OMENS[(day * 7) % OMENS.length];
-      hud.nightIntro(bossNight ? '대장의 밤' : '밤이 왔다', `${day}일째 밤 · ${omen}`, bossNight);
-      sfx('dread'); sfx('laugh', 0.9, 0.85); sfx('laugh', 1.6, 1.15);
+      hud.nightIntro(bossNight ? '대장의 밤' : '밤이 왔다', `${day}일째 밤 · ${omen}`, bossNight, EASY());
+      if (EASY()) sfx('gong');
+      else { sfx('dread'); sfx('laugh', 0.9, 0.85); sfx('laugh', 1.6, 1.15); }
       camera.shake = Math.max(camera.shake, 0.5);
     } else {
       sfx('laugh', 0.4, 1.1);
@@ -872,6 +934,7 @@ function tick(dt) {
   const lowHp = player.hp < 35 ? 0.35 + (1 - player.hp / 35) * 0.6 : 0;
 
   ambience.update(dt, { darkness, fireNear: Math.max(0, 1 - fireDist() / 9), lowHp, playing: true, time: nowS });
+  hud.setGoal(currentGoal(phase, inLight, c.fireR), player.pos, camera.cam);
   const chest = chestNear();
   hud.update({
     dt, time: nowS, hp: player.hp, hpMax: rules.playerHp, inv: player.inv, fuel: world.fire.fuel, fuelMax: world.fire.max,

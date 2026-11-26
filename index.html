@@ -43,6 +43,7 @@
           <span class="clock-text" id="clock-text">낮</span>
           <div class="clock-bar"><i id="clock-fill"></i></div>
         </div>
+        <div id="goal" hidden><span id="goal-arrow">➤</span><span id="goal-text"></span></div>
         <div id="boss-bar" hidden><span>도깨비 대장</span><div class="bar"><i id="boss-fill"></i></div></div>
       </div>
       <div class="hud-right">
@@ -90,6 +91,12 @@
         <p>곰은 동굴에서 백 일을 버텨 사람이 되었다.<br />너는 도깨비 섬에서 <b>백 일 밤</b>을 버텨라.<br />낮에는 모으고 짓고, 밤에는 불빛을 지켜라.</p>
         <button id="continue-btn" class="primary" hidden>이어하기</button>
         <button id="start-btn" class="primary">첫째 날 시작</button>
+        <div class="mode-pick">
+          <span>난이도</span>
+          <button data-mode="easy">쉬움</button>
+          <button data-mode="normal">보통</button>
+        </div>
+        <small class="mode-desc" id="mode-desc"></small>
         <p class="best" id="best"></p>
       </div>
     </section>
@@ -108,6 +115,7 @@
         <h2 id="result-title">살아남았다</h2>
         <p id="result-desc"></p>
         <ul class="stats" id="result-stats"></ul>
+        <button id="retry-btn" class="primary" hidden>아침부터 다시</button>
         <button id="again-btn" class="primary">다시 하기</button>
       </div>
     </section>

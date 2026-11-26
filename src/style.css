@@ -97,7 +97,7 @@ html, body {
 
 /* ---------- Toast & popups ---------- */
 #toast {
-  position: absolute; left: 50%; top: calc(64px + var(--safe-t)); transform: translateX(-50%);
+  position: absolute; left: 50%; top: calc(104px + var(--safe-t)); transform: translateX(-50%);
   padding: 10px 18px; border-radius: 14px; background: var(--panel); border: 1px solid var(--panel-line);
   font-weight: 800; font-size: 16px; white-space: nowrap; opacity: 0; transition: opacity .3s, transform .3s;
   pointer-events: none;
@@ -369,9 +369,27 @@ html, body {
   .hud-right { grid-area: right; }
   .hud-center { grid-area: center; justify-self: center; }
   .bar { width: 84px; }
-  #toast { top: calc(130px + var(--safe-t)); }
+  #toast { top: calc(176px + var(--safe-t)); max-width: 92vw; white-space: normal; text-align: center; }
   #banner b { font-size: 30px; }
   .item-btn { width: 50px; height: 56px; }
 }
 #dialog:not([hidden]) ~ #keys-hint { display: none; }
 #dialog:not([hidden]) ~ #touch { opacity: .25; }
+
+/* difficulty picker */
+.mode-pick { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 14px; font-size: 13px; color: var(--ink-dim); }
+.panel .mode-pick button { display: inline-block; width: auto; margin: 0; padding: 7px 16px; border-radius: 999px; border: 1px solid var(--panel-line); background: transparent; color: var(--ink-dim); font-family: inherit; font-weight: 800; font-size: 14px; }
+.panel .mode-pick button.on { background: #ffd27a; color: var(--accent-ink); border-color: #ffd27a; }
+.mode-desc { display: block; margin-top: 6px; font-size: 11px; color: var(--ink-dim); }
+
+/* objective line */
+#goal {
+  margin-top: 6px; display: flex; align-items: center; gap: 6px; padding: 5px 12px 5px 8px; border-radius: 999px;
+  background: rgba(255, 210, 122, .92); color: #3a1d00; font-size: 13px; font-weight: 900; white-space: nowrap;
+  box-shadow: 0 3px 0 rgba(0,0,0,.25); max-width: 92vw; overflow: hidden; text-overflow: ellipsis;
+}
+#goal-arrow { display: inline-block; font-size: 14px; transition: transform .15s; }
+#goal.urgent { background: rgba(255, 110, 100, .95); color: #fff; animation: nudge 0.8s ease-in-out infinite; }
+#night-intro.soft { animation: niFadeSoft 3.6s ease-out forwards; }
+#night-intro.soft b { animation: niFlicker 3.6s steps(1) forwards; }
+@keyframes niFadeSoft { 0% { background: rgba(0,0,0,0); } 10% { background: rgba(0,0,0,.35); } 100% { background: rgba(0,0,0,0); opacity: 0; } }

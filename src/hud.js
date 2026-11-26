@@ -130,18 +130,37 @@ export class Hud {
   }
 
   /** spooky night-start card: black flash, flickering red title, an ominous line */
-  nightIntro(title, sub, boss = false) {
+  nightIntro(title, sub, boss = false, soft = false) {
     const el = $('night-intro');
     this.el.banner.classList.remove('show'); this.bannerTimer = 0;
     this.el.toast.classList.remove('show'); this.toastTimer = 0;
     $('ni-title').textContent = title;
     $('ni-sub').textContent = sub;
-    el.className = boss ? 'boss' : '';
+    el.className = (boss ? 'boss' : '') + (soft ? ' soft' : '');
     el.hidden = true;
     void el.offsetWidth;
     el.hidden = false;
     clearTimeout(this.niTimer);
     this.niTimer = setTimeout(() => { el.hidden = true; }, 3700);
+  }
+
+  // ---------- goal line with an arrow pointing at the target ----------
+  setGoal(g, from, camera) {
+    const el = $('goal');
+    if (!g) { el.hidden = true; return; }
+    el.hidden = false;
+    if (this.goalText !== g.text) { this.goalText = g.text; $('goal-text').textContent = g.text; }
+    el.classList.toggle('urgent', !!g.urgent);
+    const arrow = $('goal-arrow');
+    if (g.target && Math.hypot(g.target.x - from.x, g.target.z - from.z) > 3) {
+      const a = this.screen({ x: from.x, y: 0.5, z: from.z }, camera);
+      const b = this.screen({ x: g.target.x, y: 0.5, z: g.target.z }, camera);
+      const ang = Math.atan2(b.y - a.y, b.x - a.x);
+      arrow.style.visibility = 'visible';
+      arrow.style.transform = `rotate(${ang}rad)`;
+    } else {
+      arrow.style.visibility = 'hidden';
+    }
   }
 
   // ---------- dialogue ----------
