@@ -10,6 +10,8 @@ import { Effects } from './effects.js';
 import { Camp } from './camp.js';
 import { Critters } from './critters.js';
 import { Eyes } from './spooky.js';
+import { Village } from './villagers.js';
+import { PROLOGUE, campLine } from './story.js';
 import { sfx, unlock, ambience, isMuted, setMuted, audioState } from './sound.js';
 import { Hud, buildTunePanel } from './hud.js';
 import { RECIPES, USE_ORDER, ITEMS, canAfford, pay, rollLoot } from './items.js';
@@ -34,6 +36,11 @@ const camp = new Camp(scene, world);
 const player = new Player(scene);
 const critters = new Critters(scene);
 const eyes = new Eyes(scene);
+const village = new Village(scene, world, effects);
+// the torch: one light that follows the player (created up front so shaders don't recompile)
+const torchLight = new THREE.PointLight(0xffb050, 0, 9, 1.5);
+scene.add(torchLight);
+let torchFlame = null;
 const monsters = new Monsters(scene, effects);
 const daynight = new DayNight(scene, renderer);
 const hud = new Hud(input);
@@ -76,7 +83,8 @@ function readSave() {
 }
 function saveGame() {
   store.set(SAVE_KEY, JSON.stringify({
-    v: 1, day, inv: player.inv, ironAxe: player.ironAxe, hp: Math.round(player.hp),
+    v: 1, day, inv: player.inv, ironAxe: player.ironAxe, axeLevel: player.axeLevel, armor: player.armor, hp: Math.round(player.hp),
+    villagers: village.inCamp.map((p) => p.def.id),
     water: Math.round(player.water), food: Math.round(player.food),
     fireLv: world.fire.level, fuel: Math.round(world.fire.fuel), stats: player.stats, camp: camp.serialize(),
   }));
@@ -109,6 +117,7 @@ function startGame(save = null) {
   announced = {};
   hitStop = 0;
   eyes.clear();
+  village.reset();
   state = 'playing';
   input.clear();
   $('title-screen').hidden = true;
@@ -121,7 +130,9 @@ function startGame(save = null) {
   if (save) {
     day = save.day;
     Object.assign(player.inv, save.inv);
-    player.setAxe(!!save.ironAxe);
+    player.setAxe(save.axeLevel ?? (save.ironAxe ? 1 : 0));
+    player.setArmor(!!save.armor);
+    village.restore(save.villagers || [], world.fire);
     player.hp = save.hp; player.water = save.water; player.food = save.food;
     Object.assign(player.stats, save.stats);
     world.setFireLevel(save.fireLv);
@@ -130,9 +141,23 @@ function startGame(save = null) {
     hud.banner(`${day}일째 아침`, '이어서 버텨라', 2.6);
     return;
   }
-  hud.banner('1일째 아침', '백 일 밤을 버텨라', 2.6);
-  setTimeout(() => { if (state === 'playing' && day === 1) hud.toast('나무를 베고 바위를 캐고, 궤짝을 찾아보자', 3.2); }, 2400);
+  const intro = () => {
+    hud.banner('1일째 아침', '백 일 밤을 버텨라', 2.6);
+    setTimeout(() => { if (state === 'playing' && day === 1) hud.toast('섬 어딘가 노란 ! 표시: 갇힌 사람이 있다', 3.4); }, 2600);
+  };
+  if (!store.get('dokkaebi.prologue') && params.get('skipstory') !== '1') {
+    store.set('dokkaebi.prologue', '1');
+    talk(PROLOGUE, intro);
+  } else intro();
 }
+
+/** show dialogue lines; the world waits while you read */
+function talk(lines, done) {
+  state = 'talk';
+  input.clear();
+  hud.say(lines, () => { state = 'playing'; input.clear(); if (done) done(); });
+}
+$('dialog').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); unlock(); hud.dialogNext(); });
 
 function spawnDayChests(first) {
   // the first morning puts one chest close by so the player finds it
@@ -148,7 +173,7 @@ function showControls(on) {
 }
 
 function setPaused(p) {
-  if (state === 'over' || state === 'title') return;
+  if (state === 'over' || state === 'title' || state === 'talk') return;
   state = p ? 'paused' : 'playing';
   $('pause-screen').hidden = !p;
   input.clear();
@@ -172,7 +197,7 @@ function endGame(won) {
     : survived > 0 ? `${survived}일 밤을 버텼다. 최고 기록 ${best}일.` : '불빛 가까이 머물고, 밤이 오기 전에 장작을 넉넉히 모아 두자.';
   const st = player.stats;
   $('result-stats').innerHTML = [
-    ['버틴 밤', survived], ['물리친 도깨비', st.kills], ['연 궤짝', st.chests], ['지은 것', st.built],
+    ['버틴 밤', survived], ['물리친 도깨비', st.kills], ['구한 사람', village.inCamp.length], ['지은 것', st.built],
   ].map(([k, v]) => `<li>${k}<b>${v}</b></li>`).join('');
   setTimeout(() => { $('result-screen').hidden = false; }, won ? 900 : 1400);
 }
@@ -192,10 +217,28 @@ function newDay() {
   spawnDayChests(false);
   world.refillBushes();
   critters.repopulate(world, player.pos.x, player.pos.z);
+  for (const l of village.lairs) if (l.state === 'guarded') { l.state = 'open'; l.guards = []; }
+  morningGifts();
   sfx('dawn');
   saveGame();
   hud.banner(`${survived}일째 밤을 버텼다!`, `꼬끼오! ${day}일째 아침`, 3);
   effects.spawn(player.pos.x, 1.2, player.pos.z, 0xffe27a, { n: 18, speed: 3, up: 5, life: 1, size: 0.14, grav: 3 });
+}
+
+/** villagers at the camp bring things each morning */
+function morningGifts() {
+  const names = [];
+  for (const v of village.inCamp) {
+    const at = { x: v.pos.x, y: 1.4, z: v.pos.z };
+    if (v.def.id === 'bong') {
+      rollLoot('day', day).slice(0, 2).forEach((it, i) => gain(it.kind, Math.min(it.n, 3), at, 1200 + i * 200));
+      names.push(v.def.name);
+    } else if (v.def.id === 'samwol') {
+      gain('herb', 1, at, 1400); gain('berry', 3, at, 1600);
+      names.push(v.def.name);
+    }
+  }
+  if (names.length) setTimeout(() => hud.toast(`${names.join(', ')}이(가) 아침 선물을 가져왔다`, 2.6), 3200);
 }
 
 $('start-btn').onclick = () => startGame();
@@ -236,7 +279,7 @@ const OMENS = [
 // ---------- gameplay helpers ----------
 const fireDist = () => Math.hypot(player.pos.x - world.fire.x, player.pos.z - world.fire.z);
 const nearFire = () => fireDist() < 2.3 + world.fire.level * 0.3;
-const axeDmg = () => (player.ironAxe ? 2 : 1);
+const axeDmg = () => [1, 2, 3][player.axeLevel];
 
 /** nearest thing worth swinging at, within reach */
 function findTarget(maxDist) {
@@ -260,6 +303,7 @@ function findTarget(maxDist) {
 }
 
 const chestNear = () => camp.nearestChest(player.pos.x, player.pos.z, 1.9);
+const rescuable = () => { const l = village.lairNear(player.pos.x, player.pos.z, 2.8); return l && l.state === 'cleared' ? l : null; };
 const canDrink = () => player.water < 97 && (world.atShore(player.pos.x, player.pos.z) || camp.nearWell(player.pos.x, player.pos.z));
 const bushNear = () => world.bushes.find((b) => b.ripe && Math.hypot(b.x - player.pos.x, b.z - player.pos.z) < b.r + 1.3);
 
@@ -301,6 +345,22 @@ function tryAction() {
   if (player.attacking || player.rolling) return;
   const c = chestNear();
   if (c) { openChest(c); return; }
+  const lair = rescuable();
+  if (lair) {
+    const v = village.free(lair);
+    sfx('chest');
+    player.stats.rescued = (player.stats.rescued || 0) + 1;
+    talk(v.def.rescue.map((text) => ({ who: v.def.name, role: v.def.role, text })), () => hud.toast(`${v.def.name}을(를) 모닥불까지 데려가자`, 3));
+    return;
+  }
+  const npc = village.talkable(player.pos.x, player.pos.z);
+  if (npc && !nearFire()) {
+    npc.facing = Math.atan2(player.pos.x - npc.pos.x, player.pos.z - npc.pos.z);
+    const lines = npc.def.idle;
+    npc.lastLine = ((npc.lastLine ?? Math.floor(Math.random() * lines.length)) + 1) % lines.length;
+    talk([{ who: npc.def.name, role: npc.def.role, text: lines[npc.lastLine] }]);
+    return;
+  }
   if (canDrink()) {
     player.water = Math.min(100, player.water + rules.drinkAmount);
     sfx('drink');
@@ -346,7 +406,7 @@ function tryAction() {
 
 function resolveStrike() {
   const fx = Math.sin(player.facing), fz = Math.cos(player.facing);
-  const reach = tune.attackRange + (player.ironAxe ? 0.2 : 0);
+  const reach = tune.attackRange + player.axeLevel * 0.2;
   const dmg = axeDmg();
   let hitSomething = false;
   for (const m of monsters.alive) {
@@ -444,6 +504,14 @@ function craft(id) {
     effects.spawn(world.fire.x, 1, world.fire.z, 0xffb03a, { n: 30, speed: 4, up: 7, life: 1, size: 0.16, grav: 4 });
     camera.shake = 0.6;
     hud.banner('모닥불이 커졌다!', `불빛이 더 멀리 닿는다 (Lv.${world.fire.level + 1})`, 2.2);
+  } else if (id === 'steelaxe') {
+    player.setAxe(2);
+    effects.spawn(player.pos.x, 1.4, player.pos.z, 0x9fc4ff, { n: 24, speed: 3, up: 5, life: 0.8, size: 0.12, grav: 4 });
+    hud.banner('강철 도끼!', '세 배로 세게 벤다', 2.2);
+  } else if (id === 'armor') {
+    player.setArmor(true);
+    effects.spawn(player.pos.x, 1.2, player.pos.z, 0xc98a4d, { n: 20, speed: 3, up: 4, life: 0.8, size: 0.12, grav: 4 });
+    hud.banner('가죽 갑옷!', '받는 피해가 줄었다', 2.2);
   } else if (id === 'axe') {
     player.setAxe(true);
     effects.spawn(player.pos.x, 1.4, player.pos.z, 0xeaf2ff, { n: 20, speed: 3, up: 5, life: 0.8, size: 0.12, grav: 4 });
@@ -456,7 +524,7 @@ function craft(id) {
   }
 }
 
-const craftState = () => ({ fireLevel: world.fire.level, ironAxe: player.ironAxe });
+const craftState = () => ({ fireLevel: world.fire.level, ironAxe: player.ironAxe, axeLevel: player.axeLevel, armor: player.armor, musoe: village.has('musoe') });
 
 function useItem(id) {
   if (!player.inv[id] || player.dead) return;
@@ -478,6 +546,13 @@ function useItem(id) {
     effects.spawn(world.fire.x, 1.2, world.fire.z, 0xffd08a, { n: 14, speed: 1.5, up: 4, life: 0.8, size: 0.12, grav: -1 });
     hud.popup('지글지글', { x: world.fire.x, y: 2.4, z: world.fire.z }, camera.cam, 'fire big');
     gain('meat', 1, { x: world.fire.x, y: 1, z: world.fire.z }, 300);
+  } else if (id === 'torch') {
+    if (player.torchT > 0) { hud.toast('이미 횃불을 들고 있다', 1.2); sfx('deny'); return; }
+    player.inv.torch -= 1;
+    player.torchT = 45;
+    sfx('feed');
+    hud.popup('횃불!', { x: player.pos.x, y: 2.6, z: player.pos.z }, camera.cam, 'fire big');
+    if (!announced.torchTip) { announced.torchTip = true; hud.toast('횃불 빛 안으로는 도깨비가 못 들어온다 (45초)', 2.6); }
   } else if (id === 'herb') {
     if (player.hp >= rules.playerHp - 0.5) { hud.toast('체력이 가득하다', 1.2); sfx('deny'); return; }
     sfx('heal');
@@ -508,6 +583,82 @@ function useItem(id) {
   }
 }
 
+function updateTorch(time, darkness) {
+  if (!torchFlame) {
+    // flame on a stick in the free (left) hand
+    torchFlame = new THREE.Group();
+    const stick = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.6), new THREE.MeshLambertMaterial({ color: 0x8a5a2b }));
+    stick.position.z = 0.25; torchFlame.add(stick);
+    const fl = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), new THREE.MeshBasicMaterial({ color: 0xffb03a }));
+    fl.position.set(0, 0, 0.6); torchFlame.add(fl);
+    const fl2 = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.12), new THREE.MeshBasicMaterial({ color: 0xffef9a }));
+    fl2.position.set(0, 0.06, 0.62); torchFlame.add(fl2);
+    torchFlame.flames = [fl, fl2];
+    torchFlame.position.set(0, -0.62, 0.02);
+    player.rig.arms[1].add(torchFlame);
+  }
+  const on = player.torchT > 0 && state === 'playing';
+  torchFlame.visible = on;
+  const flick = 1 + Math.sin(time * 19) * 0.08 + Math.sin(time * 7.7) * 0.06;
+  torchFlame.flames.forEach((f, i) => { f.scale.setScalar(flick * (1 - i * 0.1)); f.rotation.z += 0.2; });
+  const fade = Math.min(1, player.torchT / 4); // gutters out at the end
+  torchLight.intensity = on ? (2 + darkness * 16) * flick * fade : 0;
+  torchLight.position.set(player.pos.x, 1.6, player.pos.z);
+}
+
+/** lairs (guards, rescue), villagers following and joining, the hunter's arrows */
+function updateVillage(dt, c, darkness) {
+  const fireR = c.fireR;
+  let nearest = null, nd = fireR + 10;
+  for (const m of monsters.alive) {
+    const d = Math.hypot(m.pos.x - world.fire.x, m.pos.z - world.fire.z);
+    if (d < nd) { nd = d; nearest = m; }
+  }
+  const evs = village.update(dt, { player, world, fire: world.fire, fireR, darkness, nearestMonster: nearest, day });
+  for (const e of evs) {
+    if (e.type === 'joined') {
+      const v = e.v;
+      sfx('craft'); sfx('dawn');
+      effects.spawn(v.pos.x, 1.2, v.pos.z, 0xffe27a, { n: 20, speed: 2.5, up: 5, life: 1, size: 0.13, grav: 4 });
+      hud.banner(`${v.def.name} 합류!`, v.def.perk, 3);
+      setTimeout(() => {
+        if (state === 'playing') talk(v.def.join.map((text) => ({ who: v.def.name, role: v.def.role, text })));
+      }, 1200);
+    } else if (e.type === 'shoot') {
+      sfx('swing');
+    } else if (e.type === 'arrowHit') {
+      const m = e.m;
+      const killed = m.hit(1, e.from.x, e.from.z);
+      effects.spawn(m.pos.x, 1.1, m.pos.z, 0xe8dcc0, { n: 6, speed: 3, up: 2, life: 0.3, size: 0.08 });
+      sfx(killed ? 'kill' : 'hitMonster');
+      if (killed) {
+        player.stats.kills += 1;
+        hud.popup('범수의 화살!', { x: m.pos.x, y: 2.4, z: m.pos.z }, camera.cam, 'fire big');
+        gain('bead', m.T.beads, { x: m.pos.x, y: 1.2, z: m.pos.z }, 200);
+      }
+    }
+  }
+  // lairs: guards wake when you come close; the cage opens once they're gone
+  for (const l of village.lairs) {
+    const d = Math.hypot(l.x - player.pos.x, l.z - player.pos.z);
+    if (l.state === 'sealed' && d < 5) {
+      const key = 'seal' + l.index;
+      if (!announced[key]) { announced[key] = true; hud.toast(`도깨비 봉인이 단단하다. ${l.def.unlockDay}일째부터 풀린다`, 2.8); sfx('deny'); }
+    } else if (l.state === 'open' && d < 9) {
+      l.state = 'guarded';
+      l.guards = monsters.spawnGuards(day, l.def.guards, l.x, l.z);
+      sfx('drum'); sfx('laugh', 0.2, 1);
+      hud.popup(l.def.cage, { x: l.x, y: 3.2, z: l.z }, camera.cam, 'fire big');
+      hud.toast('소굴을 지키는 도깨비들이다! 모두 물리치자', 2.8);
+      camera.shake = 0.6;
+    } else if (l.state === 'guarded' && l.guards.every((m) => !m.alive)) {
+      l.state = 'cleared';
+      sfx('chest');
+      hud.toast(`지키던 도깨비를 다 물리쳤다! 우리로 가서 "구하기"`, 3);
+    }
+  }
+}
+
 // ---------- main loop ----------
 let last = performance.now();
 let clock = 0;
@@ -524,6 +675,15 @@ function tick(dt) {
   input.update();
 
   if (input.consume('pause')) setPaused(state === 'playing');
+  if (state === 'talk') {
+    // reading: the world holds still; action / tap moves the dialogue on
+    if (input.consume('action')) hud.dialogNext();
+    if (hud.dlg && hud.dlg.typing) hud.typeTick(dt);
+    input.pressed.clear();
+    camera.update(dt, player.pos, tmp.set(0, 0, 0));
+    renderer.render(scene, camera.cam);
+    return;
+  }
   if (state !== 'playing') {
     input.pressed.clear();
     if (state === 'title' || state === 'over') {
@@ -562,7 +722,7 @@ function tick(dt) {
   }
 
   if (input.consume('roll') && player.startRoll(wish.clone())) sfx('roll');
-  const autoOk = !player.attacking && !player.rolling && !nearFire() && !chestNear() && !bushNear();
+  const autoOk = !player.attacking && !player.rolling && !nearFire() && !chestNear() && !bushNear() && !rescuable() && !village.talkable(player.pos.x, player.pos.z);
   if (input.consume('action') || (input.actionHeld && autoOk)) tryAction();
 
   const ev = player.update(dt, wish, world);
@@ -583,12 +743,20 @@ function tick(dt) {
   world.updateRocks(dt);
   world.updateOcclusion(dt, player.pos.x, player.pos.z, camera.back);
   camp.update(dt, nowS, darkness);
+
+  // torch: a small moving light that also keeps monsters back
+  if (player.torchT > 0) {
+    player.torchT = Math.max(0, player.torchT - gdt);
+    if (player.torchT === 0) { hud.toast('횃불이 다 탔다', 1.6); sfx('fireOut'); }
+  }
+  updateTorch(nowS, darkness);
   const c = ctx();
 
   const beat = (key, text, secs) => { if (!announced[key]) { announced[key] = true; hud.toast(text, secs); } };
   // healing in any light
   const inLight = c.zones.some((z) => Math.hypot(player.pos.x - z.x, player.pos.z - z.z) < z.r);
-  if (inLight && player.hurtT > 3 && player.hp < rules.playerHp) player.hp = Math.min(rules.playerHp, player.hp + rules.regenInLight * dt);
+  const regen = rules.regenInLight * (village.has('samwol') ? 2 : 1);
+  if (inLight && player.hurtT > 3 && player.hp < rules.playerHp) player.hp = Math.min(rules.playerHp, player.hp + regen * dt);
 
   // thirst and hunger
   player.water = Math.max(0, player.water - rules.waterDrain * gdt);
@@ -602,6 +770,7 @@ function tick(dt) {
 
   const nightP = phase === 'night' ? daynight.progress() : -1;
   const events = monsters.update(dt, c, nightP, day);
+  updateVillage(dt, c, darkness);
   for (const e of events) {
     const near = Math.hypot(e.m.pos.x - player.pos.x, e.m.pos.z - player.pos.z) < 14;
     if (e.type === 'windup' && near) sfx('windup');
@@ -707,18 +876,21 @@ function tick(dt) {
   hud.update({
     dt, time: nowS, hp: player.hp, hpMax: rules.playerHp, inv: player.inv, fuel: world.fire.fuel, fuelMax: world.fire.max,
     day, phase, progress: daynight.progress(), remain: daynight.remaining(),
-    actionLabel: chest ? '열기' : canDrink() ? '물 마시기' : bushNear() ? '따기' : nearFire() && player.wood > 0 ? '장작 넣기' : '베기',
+    torch: player.torchT,
+    actionLabel: chest ? '열기' : rescuable() ? '구하기' : (village.talkable(player.pos.x, player.pos.z) && !nearFire()) ? '말 걸기' : canDrink() ? '물 마시기' : bushNear() ? '따기' : nearFire() && player.wood > 0 ? '장작 넣기' : '베기',
     water: player.water, food: player.food,
     boss: monsters.boss && monsters.boss.alive ? monsters.boss : null,
     rollCool: player.rollCool > 0 || player.rolling, canCraft,
-    fireLevel: world.fire.level, ironAxe: player.ironAxe, danger, lowHp,
+    ...craftState(), danger, lowHp,
   });
   renderer.render(scene, camera.cam);
 }
 
 function ctx() {
   const fireR = world.fireRadius();
-  return { player, world, fireR, zones: camp.safeZones(fireR), effects };
+  const zones = camp.safeZones(fireR);
+  if (player.torchT > 0 && state === 'playing') zones.push({ x: player.pos.x, z: player.pos.z, r: 2.4, torch: true });
+  return { player, world, fireR, zones, effects };
 }
 
 camera.snap(player.pos);
@@ -726,7 +898,7 @@ requestAnimationFrame(frame);
 
 // debug handle for automated checks
 window.__game = {
-  get state() { return state; }, get day() { return day; }, critters, eyes, player, world, monsters, daynight, camera, input, tune, rules, camp, hud,
+  get state() { return state; }, get day() { return day; }, critters, eyes, village, player, world, monsters, daynight, camera, input, tune, rules, camp, hud,
   start: startGame, setTime: (t) => { daynight.time = t; },
   /** advance the game n frames without waiting for the browser (used by automated checks) */
   step: (n = 1, dt = 1 / 60) => { for (let i = 0; i < n; i++) tick(dt); return window.__game.info(); },

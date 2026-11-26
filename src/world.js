@@ -236,7 +236,7 @@ export class World {
       this.group.add(g);
       const col = { x, z, r: 0.45 };
       this.colliders.push(col);
-      this.bushes.push({ x, z, r: col.r, group: g, berries, ripe: true, shake: 0 });
+      this.bushes.push({ x, z, r: col.r, col, group: g, berries, ripe: true, shake: 0 });
     }
   }
 
@@ -258,7 +258,15 @@ export class World {
     }
   }
 
-  refillBushes() { for (const b of this.bushes) { b.ripe = true; b.berries.visible = true; } }
+  refillBushes() { for (const b of this.bushes) if (!b.blocked) { b.ripe = true; b.berries.visible = true; } }
+
+  /** remove trees/rocks/bushes from a spot for good (lairs sit there) */
+  clearArea(x, z, r) {
+    const drop = (col) => { const i = this.colliders.indexOf(col); if (i >= 0) this.colliders.splice(i, 1); };
+    for (const t of this.trees) if (Math.hypot(t.x - x, t.z - z) < r) { t.blocked = true; t.alive = false; t.group.visible = false; drop(t.col); }
+    for (const k of this.rocks) if (Math.hypot(k.x - x, k.z - z) < r) { k.blocked = true; k.alive = false; k.mesh.visible = false; drop(k.col); }
+    for (const b of this.bushes) if (Math.hypot(b.x - x, b.z - z) < r) { b.blocked = true; b.ripe = false; b.group.visible = false; drop(b.col); }
+  }
 
   /** standing at the water's edge? */
   atShore(x, z) { return Math.hypot(x, z) > rules.islandRadius - 1.2; }
@@ -293,7 +301,7 @@ export class World {
   regrow(share, px, pz) {
     const clear = (x, z, r) => Math.hypot(x - px, z - pz) > r + 1.2;
     for (const t of this.trees) {
-      if (t.alive || t.fall < 2 || Math.random() > share || !clear(t.x, t.z, t.r)) continue;
+      if (t.blocked || t.alive || t.fall < 2 || Math.random() > share || !clear(t.x, t.z, t.r)) continue;
       t.alive = true; t.hp = rules.treeHp; t.fall = -1; t.shake = 0;
       t.group.visible = true; t.group.position.y = 0;
       t.group.rotation.set(0, t.group.rotation.y, 0);
@@ -301,7 +309,7 @@ export class World {
       this.colliders.push(t.col);
     }
     for (const r of this.rocks) {
-      if (r.alive || Math.random() > share || !clear(r.x, r.z, r.r)) continue;
+      if (r.blocked || r.alive || Math.random() > share || !clear(r.x, r.z, r.r)) continue;
       r.alive = true; r.hp = rules.rockHp; r.gone = -1;
       r.mesh.visible = true; r.mesh.scale.set(1, 0.7, 1);
       this.colliders.push(r.col);

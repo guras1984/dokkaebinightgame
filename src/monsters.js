@@ -111,8 +111,12 @@ class Dokkaebi {
       const safe = zoneAt(zones, player.pos);
       let goal = null;
 
+      const leashed = this.home && Math.hypot(player.pos.x - this.home.x, player.pos.z - this.home.z) > this.home.r;
       if (this.state === 'chase') {
-        if (safe) {
+        if (leashed) {
+          // lair guards don't chase you across the island
+          goal = new THREE.Vector3(this.home.x + Math.sin(this.time * 0.5 + this.speedMul * 7) * 2, 0, this.home.z + Math.cos(this.time * 0.5 + this.speedMul * 7) * 2);
+        } else if (safe) {
           // wait just outside the light, on the player's side
           const a = Math.atan2(player.pos.x - safe.x, player.pos.z - safe.z);
           const jitter = Math.sin(this.time * 0.7 + this.speedMul * 9) * 0.5;
@@ -249,9 +253,10 @@ class Wisp {
       }
       return null;
     } else {
-      const safe = zoneAt(zones, player.pos);
+      const leashed = this.home && Math.hypot(player.pos.x - this.home.x, player.pos.z - this.home.z) > this.home.r;
+      const safe = leashed ? this.home : zoneAt(zones, player.pos);
       const cx = safe ? safe.x : player.pos.x, cz = safe ? safe.z : player.pos.z;
-      const orbitR = safe ? safe.r + 1.4 : 4.6;
+      const orbitR = leashed ? 2.5 : safe ? safe.r + 1.4 : 4.6;
       if (this.state === 'orbit') {
         this.orbitA += this.orbitDir * dt * (safe ? 0.35 : 1.1);
         const gx = cx + Math.sin(this.orbitA) * orbitR, gz = cz + Math.cos(this.orbitA) * orbitR;
@@ -373,6 +378,21 @@ export class Monsters {
     const m = this.spawn(ctx, difficulty(night), 'boss');
     this.boss = m;
     return m;
+  }
+
+  /** lair guards: stay near home (x,z) and only fight you there */
+  spawnGuards(night, types, x, z) {
+    const d = difficulty(Math.max(1, night));
+    return types.map((type, i) => {
+      const a = (i / types.length) * Math.PI * 2;
+      const gx = x + Math.sin(a) * 2.6, gz = z + Math.cos(a) * 2.6;
+      const m = type === 'wisp' ? new Wisp(this.scene, gx, gz, d) : new Dokkaebi(this.scene, gx, gz, this.count, type, d);
+      this.count++;
+      m.home = { x, z, r: 11 };
+      this.effects.spawn(gx, 0.6, gz, 0xff6a4a, { n: 10, speed: 1.5, up: 3, life: 0.7, size: 0.18, grav: -1 });
+      this.list.push(m);
+      return m;
+    });
   }
 
   /** two helpers pop out right next to (x,z) */

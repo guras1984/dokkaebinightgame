@@ -22,7 +22,9 @@ export class Player {
     this.inv = emptyInventory();
     this.water = 100;
     this.food = 100;
-    this.setAxe(false);
+    this.setAxe(0);
+    this.setArmor(false);
+    this.torchT = 0;
     this.attackT = -1;          // 0..1 while swinging
     this.attackHit = false;
     this.rollT = -1;
@@ -41,13 +43,36 @@ export class Player {
   }
 
   /** stone axe at the start, shiny bigger iron axe once crafted */
-  setAxe(iron) {
-    this.ironAxe = iron;
+  setAxe(level) {
+    // 0 stone, 1 iron, 2 steel (blue-white, bigger)
+    level = level === true ? 1 : level === false ? 0 : level;
+    this.axeLevel = level;
     const [, blade, edge] = this.rig.weapon.children;
-    blade.material.color.setHex(iron ? 0xc7cdd6 : 0x8b8478);
-    edge.material.color.setHex(iron ? 0xf6faff : 0xa69f92);
-    const k = iron ? 1.3 : 1;
+    blade.material.color.setHex([0x8b8478, 0xc7cdd6, 0x9fc4ff][level]);
+    edge.material.color.setHex([0xa69f92, 0xf6faff, 0xffffff][level]);
+    const k = [1, 1.3, 1.55][level];
     blade.scale.set(1, k, k); edge.scale.set(1, k, 1);
+  }
+  get ironAxe() { return this.axeLevel >= 1; }
+
+  /** leather armour: shoulder pads + belt, takes less damage */
+  setArmor(on) {
+    this.armor = on;
+    if (!this.armorParts) {
+      const m = new THREE.MeshLambertMaterial({ color: 0x8a5a2b, flatShading: true });
+      const t = this.rig.torso;
+      this.armorParts = [
+        new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.14, 0.5), m),
+        new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.14, 0.5), m),
+        new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.12, 0.48), m),
+        new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.4, 0.06), m),
+      ];
+      const [l, r, belt, plate] = this.armorParts;
+      l.position.set(-0.36, 0.33, 0); r.position.set(0.36, 0.33, 0);
+      belt.position.set(0, -0.3, 0); plate.position.set(0, 0.02, 0.24);
+      this.armorParts.forEach((p) => { p.castShadow = true; t.add(p); });
+    }
+    this.armorParts.forEach((p) => { p.visible = on; });
   }
 
   get wood() { return this.inv.wood; }
@@ -89,6 +114,8 @@ export class Player {
 
   hurt(amount, fromX, fromZ) {
     if (this.invuln > 0 || this.rolling || this.dead) return false;
+    if (this.armor) amount = Math.round(amount * 0.65);
+    this.lastDamage = amount;
     this.hp = Math.max(0, this.hp - amount);
     this.hurtT = 0;
     this.invuln = rules.hurtGrace;

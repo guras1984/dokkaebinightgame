@@ -4,7 +4,8 @@ import { ITEMS, USE_ORDER, RECIPES, canAfford } from './items.js';
 import { sfx } from './sound.js';
 
 const $ = (id) => document.getElementById(id);
-const COST_ICON = { wood: 'wood', stone: 'stone', bead: 'bead' };
+const RES_KINDS = ['wood', 'stone', 'bead'];
+const costIcon = (k) => (RES_KINDS.includes(k) ? `<span class="res-icon ${k}"></span>` : `<span class="item-icon ${k} mini"></span>`);
 
 export class Hud {
   constructor(input) {
@@ -56,6 +57,10 @@ export class Hud {
     $('food-fill').style.width = `${s.food}%`;
     $('need-water').classList.toggle('low', s.water < 25);
     $('need-food').classList.toggle('low', s.food < 25);
+    const tc = $('need-torch');
+    if (tc.hidden === s.torch > 0) tc.hidden = !(s.torch > 0);
+    if (s.torch > 0) $('torch-time').textContent = Math.ceil(s.torch);
+    if (this.dlg && this.dlg.typing) this.typeTick(s.dt);
     for (const kind of ['wood', 'stone', 'bead']) {
       const n = this.shownCount(kind, s.inv[kind]);
       if (this.shown[kind] !== n) { this.shown[kind] = n; $('res-' + kind).textContent = n; }
@@ -84,6 +89,8 @@ export class Hud {
       e.action.classList.toggle('feed', s.actionLabel === '장작 넣기');
       e.action.classList.toggle('open', s.actionLabel === '열기' || s.actionLabel === '따기');
       e.action.classList.toggle('drink', s.actionLabel === '물 마시기');
+      e.action.classList.toggle('talk', s.actionLabel === '말 걸기');
+      e.action.classList.toggle('rescue', s.actionLabel === '구하기');
       this.lastAction = s.actionLabel;
     }
     e.roll.classList.toggle('cool', s.rollCool);
@@ -137,6 +144,43 @@ export class Hud {
     this.niTimer = setTimeout(() => { el.hidden = true; }, 3700);
   }
 
+  // ---------- dialogue ----------
+  /** lines: [{who, role, text}] — calls done() after the last one */
+  say(lines, done) {
+    this.dlg = { lines, i: -1, done, typing: false, shown: 0 };
+    $('dialog').hidden = false;
+    this.dialogNext();
+  }
+
+  get talking() { return !!this.dlg; }
+
+  dialogNext() {
+    const d = this.dlg;
+    if (!d) return;
+    if (d.typing) { d.typing = false; $('dlg-text').textContent = d.lines[d.i].text; return; } // finish the line first
+    d.i += 1;
+    if (d.i >= d.lines.length) {
+      $('dialog').hidden = true;
+      this.dlg = null;
+      if (d.done) d.done();
+      return;
+    }
+    const L = d.lines[d.i];
+    $('dlg-name').textContent = L.who;
+    $('dlg-role').textContent = L.role || '';
+    $('dialog').className = L.who === '이야기' ? 'narrator' : '';
+    $('dlg-text').textContent = '';
+    d.typing = true; d.shown = 0;
+  }
+
+  typeTick(dt) {
+    const d = this.dlg;
+    const text = d.lines[d.i].text;
+    d.shown = Math.min(text.length, d.shown + dt * 38);
+    $('dlg-text').textContent = text.slice(0, Math.floor(d.shown));
+    if (d.shown >= text.length) d.typing = false;
+  }
+
   setNightGloom(v) { $('night-vignette').style.opacity = v.toFixed(3); }
 
   // ---------- crafting panel ----------
@@ -157,7 +201,7 @@ export class Hud {
       const row = document.createElement('div');
       row.className = 'recipe' + (ok ? '' : ' no');
       const cost = Object.entries(r.cost).map(([k, v]) =>
-        `<span class="cost ${(s.inv[k] || 0) >= v ? '' : 'short'}"><span class="res-icon ${COST_ICON[k]}"></span>${v}</span>`).join('');
+        `<span class="cost ${(s.inv[k] || 0) >= v ? '' : 'short'}">${costIcon(k)}${v}</span>`).join('');
       row.innerHTML = `<div class="r-text"><b>${r.name}</b><small>${r.desc}</small><div class="costs">${cost}</div></div>`;
       const btn = document.createElement('button');
       btn.className = 'r-btn';

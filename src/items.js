@@ -14,11 +14,12 @@ export const ITEMS = {
   lantern: { name: '석등', use: true, hint: '앞에 설치' },
   well:    { name: '우물', use: true, hint: '앞에 설치' },
   fence:   { name: '울타리', use: true, hint: '앞에 설치' },
+  torch:   { name: '횃불', use: true, hint: '들고 다니는 빛' },
 };
-export const USE_ORDER = ['berry', 'meat', 'rawmeat', 'herb', 'charm', 'lantern', 'fence', 'well'];
+export const USE_ORDER = ['berry', 'meat', 'rawmeat', 'herb', 'charm', 'torch', 'lantern', 'fence', 'well'];
 
 export function emptyInventory() {
-  return { wood: 0, stone: 0, bead: 0, berry: 0, meat: 0, rawmeat: 0, herb: 0, charm: 0, lantern: 0, fence: 0, well: 0 };
+  return { wood: 0, stone: 0, bead: 0, berry: 0, meat: 0, rawmeat: 0, herb: 0, charm: 0, lantern: 0, fence: 0, well: 0, torch: 0 };
 }
 
 export const RECIPES = [
@@ -27,7 +28,10 @@ export const RECIPES = [
   { id: 'lantern', name: '석등', desc: '밤새 빛나는 작은 안전지대 (최대 4)', cost: { stone: 5, wood: 2 }, gives: 'lantern', show: () => true },
   { id: 'well', name: '우물', desc: '야영지에서 물을 마신다 (최대 2)', cost: { stone: 8, wood: 4 }, gives: 'well', show: () => true },
   { id: 'fence', name: '나무 울타리 ×2', desc: '도깨비 길을 막는 벽', cost: { wood: 3 }, gives: 'fence', amount: 2, show: () => true },
+  { id: 'torch', name: '횃불', desc: '들면 45초 동안 작은 빛. 도깨비가 다가오지 못한다', cost: { wood: 3, stone: 1 }, gives: 'torch', show: () => true },
   { id: 'axe', name: '쇠도끼', desc: '두 배로 세게 벤다', cost: { stone: 8, bead: 3 }, show: (s) => !s.ironAxe },
+  { id: 'steelaxe', name: '강철 도끼 (무쇠)', desc: '세 배로 세게, 조금 더 멀리', cost: { stone: 12, bead: 6 }, show: (s) => s.musoe && s.axeLevel === 1 },
+  { id: 'armor', name: '가죽 갑옷 (무쇠)', desc: '받는 피해 35% 줄임', cost: { rawmeat: 3, stone: 6, bead: 4 }, show: (s) => s.musoe && !s.armor },
   { id: 'charm', name: '부적', desc: '주변 도깨비를 한 번에 쫓아낸다', cost: { bead: 2, wood: 1 }, gives: 'charm', show: () => true },
   { id: 'herb', name: '약초 달이기', desc: '체력 +' + rules.herbHeal, cost: { wood: 2, bead: 1 }, gives: 'herb', show: () => true },
 ];
