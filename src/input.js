@@ -2,6 +2,16 @@
 const STICK_RADIUS = 56;
 const DEADZONE = 0.12;
 
+// Map by physical key (e.code) so Korean input mode (W → 'ㅈ', or 'Process' while composing) still works.
+const CODE_MAP = {
+  KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', KeyJ: 'j', KeyK: 'k', KeyP: 'p',
+  ArrowUp: 'arrowup', ArrowDown: 'arrowdown', ArrowLeft: 'arrowleft', ArrowRight: 'arrowright',
+  Space: ' ', ShiftLeft: 'shift', ShiftRight: 'shift', Escape: 'escape',
+};
+function keyName(e) {
+  return CODE_MAP[e.code] || (e.key || '').toLowerCase();
+}
+
 export class Input {
   constructor() {
     this.move = { x: 0, y: 0 };
@@ -32,7 +42,7 @@ export class Input {
   }
 
   onKey(e, down) {
-    const k = e.key.toLowerCase();
+    const k = keyName(e);
     if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
     if (down) {
       if (!e.repeat) {

@@ -291,7 +291,7 @@ window.__game = {
   start: startGame, setTime: (t) => { daynight.time = t; },
   /** advance the game n frames without waiting for the browser (used by automated checks) */
   step: (n = 1, dt = 1 / 60) => { for (let i = 0; i < n; i++) tick(dt); return window.__game.info(); },
-  key: (k, down) => dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', { key: k })),
+  key: (k, down, code) => dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', { key: k, code })),
   info: () => ({
     state, phase: daynight.phase(), time: +daynight.time.toFixed(1), hp: +player.hp.toFixed(1), wood: player.wood,
     fuel: +world.fire.fuel.toFixed(1), fireR: +world.fireRadius().toFixed(2), monsters: monsters.alive.length,
