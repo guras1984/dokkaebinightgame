@@ -33,29 +33,30 @@ export const tuneRanges = {
 };
 
 export const rules = {
-  dayLength: 140,
-  duskLength: 16,
-  nightLength: 170,
+  // one full day ≈ 3 minutes (kid feedback 2026-11-27: the old 5½ minutes felt slow)
+  dayLength: 80,
+  duskLength: 10,
+  nightLength: 95,
   islandRadius: 28.5,
   playerHp: 100,
   playerRadius: 0.42,
-  regenInLight: 3,      // hp/s near the fire, when not hurt recently
+  regenInLight: 4,      // hp/s near the fire, when not hurt recently
   hurtGrace: 0.7,
   woodPerTree: 2,
   treeHp: 3,
   fireStart: 45,        // fuel 0..100
   fireMax: 100,
   fuelPerWood: 12,
-  burnDay: 0.12,        // fuel per second
-  burnNight: 0.6,
+  burnDay: 0.21,        // fuel per second (≈ same fuel per day as before, days are shorter)
+  burnNight: 1.05,
   fireMinRadius: 2.6,
   fireRadiusPerFuel: 0.058,
   monsterHp: 3,
   monsterSpeed: 3.3,
   monsterDamage: 15,
   monsterWindup: 0.55,
-  spawnStart: 7,
-  spawnEnd: 3.2,
+  spawnStart: 4.2,
+  spawnEnd: 2.0,
   capStart: 3,
   capEnd: 8,
 
@@ -75,8 +76,8 @@ export const rules = {
   nightChestAt: 0.25,   // night progress when the glowing chest appears
   raidAt: 0.55,         // night progress of the raid (from night 2)
   // --- survival needs ---
-  waterDrain: 0.3,      // per second (full → empty in ~5.5 min)
-  foodDrain: 0.22,      // per second (full → empty in ~7.5 min)
+  waterDrain: 0.45,     // per second (full → empty in ~3.7 min ≈ a bit over a day)
+  foodDrain: 0.34,      // per second (full → empty in ~5 min)
   needDamage: 1.2,      // hp/s while water or food is empty
   drinkAmount: 35,
   berryFood: 14,
@@ -87,7 +88,7 @@ export const rules = {
   wellMax: 2,
   bossEvery: 5,         // boss night every N nights
   bossAt: 0.3,          // night progress when the chief arrives
-  bossSlam: 6,          // seconds between fire-shaking slams while you hide
+  bossSlam: 5,          // seconds between fire-shaking slams while you hide
   bossSlamFuel: 7,
   hitStop: 0.05,
   killStop: 0.09,

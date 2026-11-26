@@ -572,10 +572,10 @@ function useItem(id) {
   } else if (id === 'torch') {
     if (player.torchT > 0) { hud.toast('이미 횃불을 들고 있다', 1.2); sfx('deny'); return; }
     player.inv.torch -= 1;
-    player.torchT = 45;
+    player.torchT = 30;
     sfx('feed');
     hud.popup('횃불!', { x: player.pos.x, y: 2.6, z: player.pos.z }, camera.cam, 'fire big');
-    if (!announced.torchTip) { announced.torchTip = true; hud.toast('횃불 빛 안으로는 도깨비가 못 들어온다 (45초)', 2.6); }
+    if (!announced.torchTip) { announced.torchTip = true; hud.toast('횃불 빛 안으로는 도깨비가 못 들어온다 (30초)', 2.6); }
   } else if (id === 'herb') {
     if (player.hp >= rules.playerHp - 0.5) { hud.toast('체력이 가득하다', 1.2); sfx('deny'); return; }
     sfx('heal');
@@ -626,7 +626,7 @@ function currentGoal(phase, inLight, fireR) {
     if (player.inv.meat || player.inv.berry) return { text: '아이템 칸에서 먹을 것 누르기', target: null, urgent: player.food < 12 };
     return { text: '빨간 열매 덤불에서 산딸기 따기', target: near(world.bushes, (b) => b.ripe), urgent: player.food < 12 };
   }
-  const late = phase === 'dusk' || (phase === 'day' && daynight.remaining() < 35);
+  const late = phase === 'dusk' || (phase === 'day' && daynight.remaining() < 22);
   if (late && player.wood > 0 && world.fire.fuel < world.fire.max * 0.7) return { text: '해가 진다! 모닥불에 장작 넣기', target: fire, urgent: true };
   if (late) return { text: '곧 밤! 모닥불 옆으로', target: fire, urgent: phase === 'dusk' };
   const guarded = village.lairs.find((l) => l.state === 'guarded');

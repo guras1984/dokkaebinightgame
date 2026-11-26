@@ -28,7 +28,7 @@ export const RECIPES = [
   { id: 'lantern', name: '석등', desc: '밤새 빛나는 작은 안전지대 (최대 4)', cost: { stone: 5, wood: 2 }, gives: 'lantern', show: () => true },
   { id: 'well', name: '우물', desc: '야영지에서 물을 마신다 (최대 2)', cost: { stone: 8, wood: 4 }, gives: 'well', show: () => true },
   { id: 'fence', name: '나무 울타리 ×2', desc: '도깨비 길을 막는 벽', cost: { wood: 3 }, gives: 'fence', amount: 2, show: () => true },
-  { id: 'torch', name: '횃불', desc: '들면 45초 동안 작은 빛. 도깨비가 다가오지 못한다', cost: { wood: 3, stone: 1 }, gives: 'torch', show: () => true },
+  { id: 'torch', name: '횃불', desc: '들면 30초 동안 작은 빛. 도깨비가 다가오지 못한다', cost: { wood: 3, stone: 1 }, gives: 'torch', show: () => true },
   { id: 'axe', name: '쇠도끼', desc: '두 배로 세게 벤다', cost: { stone: 8, bead: 3 }, show: (s) => !s.ironAxe },
   { id: 'steelaxe', name: '강철 도끼 (무쇠)', desc: '세 배로 세게, 조금 더 멀리', cost: { stone: 12, bead: 6 }, show: (s) => s.musoe && s.axeLevel === 1 },
   { id: 'armor', name: '가죽 갑옷 (무쇠)', desc: '받는 피해 35% 줄임', cost: { rawmeat: 3, stone: 6, bead: 4 }, show: (s) => s.musoe && !s.armor },
