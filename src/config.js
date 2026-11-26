@@ -85,6 +85,10 @@ export const rules = {
   bushes: 11,
   rabbits: 5,
   wellMax: 2,
+  bossEvery: 5,         // boss night every N nights
+  bossAt: 0.3,          // night progress when the chief arrives
+  bossSlam: 6,          // seconds between fire-shaking slams while you hide
+  bossSlamFuel: 7,
   hitStop: 0.05,
   killStop: 0.09,
 };
@@ -101,11 +105,13 @@ export function difficulty(n) {
     wisp: n >= 2 ? Math.min(0.4, 0.18 + k * 0.03) : 0,
     elite: n >= 3 ? Math.min(0.28, 0.07 + (n - 3) * 0.03) : 0,
     raid: n >= 2 ? Math.min(14, 3 + n) : 0,
+    n,
   };
 }
 
 export const MONSTER_TYPES = {
   dokkaebi: { hp: 1, damage: 15, speed: 3.3, windup: 0.55, scale: 1, radius: 0.5, reach: 1.45, hitReach: 1.9, beads: 1 },
   elite:    { hp: 2.6, damage: 26, speed: 2.7, windup: 0.8, scale: 1.5, radius: 0.75, reach: 2.0, hitReach: 2.6, beads: 3 },
+  boss:     { hp: 1, damage: 30, speed: 2.4, windup: 1.0, scale: 2.4, radius: 1.1, reach: 2.8, hitReach: 3.4, beads: 10 },
   wisp:     { hp: 1, damage: 12, speed: 5.4, scale: 1, radius: 0.35, beads: 1 },
 };

@@ -345,6 +345,15 @@ function resolveStrike() {
     if (killed) {
       player.stats.kills += 1;
       hud.popup(m.type === 'elite' ? '큰 도깨비를 물리쳤다!' : '물리쳤다!', { x: m.pos.x, y: 2.4, z: m.pos.z }, camera.cam, 'fire big');
+      if (m.type === 'boss') {
+        hud.banner('도깨비 대장을 물리쳤다!', '도깨비들이 겁을 먹었다', 3);
+        sfx('dawn'); camera.shake = 1.4; hitStop = 0.25;
+        player.stats.bosses = (player.stats.bosses || 0) + 1;
+        gain('charm', 2, { x: m.pos.x, y: 1.5, z: m.pos.z }, 500);
+        gain('herb', 2, { x: m.pos.x, y: 1.5, z: m.pos.z }, 700);
+        // the rest of the night is calmer: scare off the small ones nearby
+        monsters.banishNear(m.pos.x, m.pos.z, 12);
+      }
       gain('bead', m.T.beads, { x: m.pos.x, y: 1.2, z: m.pos.z }, 200);
     }
   }
@@ -582,6 +591,15 @@ function tick(dt) {
     else if (e.type === 'wispCharge' && near) sfx('wispCharge');
     else if (e.type === 'wispDash' && near) sfx('wispDash');
     if (e.type === 'stomp' && near) sfx('stomp');
+    if (e.type === 'fireSlam') {
+      sfx('stomp');
+      camera.shake = 1;
+      world.fire.fuel = Math.max(0, world.fire.fuel - rules.bossSlamFuel);
+      effects.spawn(world.fire.x, 1, world.fire.z, 0xff7a3a, { n: 16, speed: 4, up: 3, life: 0.6, size: 0.14 });
+      hud.popup(`불 -${rules.bossSlamFuel}`, { x: world.fire.x, y: 2.4, z: world.fire.z }, camera.cam, 'hurt big');
+      beat('slamTip', '대장이 땅을 치자 불이 흔들린다! 나가서 싸우자', 3.2);
+    }
+    if (e.type === 'summon') { monsters.summon(c, day, e.m.pos.x, e.m.pos.z); if (near) sfx('drum'); }
     if (e.type === 'hitPlayer' && player.hurt(e.m.damage, e.m.pos.x, e.m.pos.z)) {
       sfx('hurt');
       camera.shake = 1;
@@ -605,14 +623,26 @@ function tick(dt) {
 
   // story beats
   if (phase === 'day' && daynight.remaining() < 30) beat('late', '곧 해가 진다. 모닥불에 장작을 넣자', 3);
-  if (phase === 'dusk' && !announced.dusk) { announced.dusk = true; sfx('gong'); hud.banner(`${day}일째 밤이 온다`, day === 1 ? '도깨비는 불빛 안으로 못 들어온다' : '어제보다 더 많이 온다', 2.6); }
+  const bossNight = day % rules.bossEvery === 0;
+  if (phase === 'dusk' && !announced.dusk) {
+    announced.dusk = true; sfx('gong');
+    if (bossNight) hud.banner(`${day}일째 밤 · 대장의 밤`, '오늘 밤 도깨비 대장이 온다', 3, 'raid');
+    else hud.banner(`${day}일째 밤이 온다`, day === 1 ? '도깨비는 불빛 안으로 못 들어온다' : '어제보다 더 많이 온다', 2.6);
+  }
   if (phase === 'night') {
     if (day >= 2) beat('wispTip', day === 2 ? '도깨비불은 번쩍이면 돌진한다. 구르기로 피하자' : '도깨비가 몰려온다!', 3);
     if (nightP > rules.nightChestAt && !announced.nightChest) {
       announced.nightChest = true;
       if (camp.spawnChest('night', 15, 26)) hud.toast('멀리서 도깨비 보물 궤짝이 빛난다!', 3);
     }
-    if (day >= 2 && nightP > rules.raidAt && !announced.raid) {
+    if (bossNight && nightP > rules.bossAt && !announced.boss) {
+      announced.boss = true;
+      monsters.spawnBoss(c, day);
+      sfx('raid'); sfx('gong');
+      hud.banner('도깨비 대장이 나타났다!', '불빛에 숨어 있으면 대장이 불을 흔든다', 3, 'raid');
+      camera.shake = 1.2;
+    }
+    if (day >= 2 && !bossNight && nightP > rules.raidAt && !announced.raid) {
       announced.raid = true;
       monsters.raid(c, day);
       sfx('raid');
@@ -644,6 +674,7 @@ function tick(dt) {
     day, phase, progress: daynight.progress(), remain: daynight.remaining(),
     actionLabel: chest ? '열기' : canDrink() ? '물 마시기' : bushNear() ? '따기' : nearFire() && player.wood > 0 ? '장작 넣기' : '베기',
     water: player.water, food: player.food,
+    boss: monsters.boss && monsters.boss.alive ? monsters.boss : null,
     rollCool: player.rollCool > 0 || player.rolling, canCraft,
     fireLevel: world.fire.level, ironAxe: player.ironAxe, danger, lowHp,
   });

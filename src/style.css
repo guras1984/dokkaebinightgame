@@ -89,6 +89,12 @@ html, body {
   font-size: 14px; font-weight: 800;
 }
 
+#boss-bar { margin-top: 6px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+#boss-bar span { font-size: 12px; font-weight: 900; color: #ffb3a8; text-shadow: 0 1px 2px #000; letter-spacing: .1em; }
+#boss-bar .bar { width: 220px; height: 12px; border: 1px solid rgba(255,120,100,.6); }
+#boss-fill { background: linear-gradient(90deg, #c23a2a, #ff7a4a); }
+.hud-center { display: flex; flex-direction: column; align-items: center; }
+
 /* ---------- Toast & popups ---------- */
 #toast {
   position: absolute; left: 50%; top: calc(64px + var(--safe-t)); transform: translateX(-50%);

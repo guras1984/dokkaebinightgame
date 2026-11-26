@@ -25,8 +25,9 @@ class Dokkaebi {
     const T = MONSTER_TYPES[type];
     this.type = type;
     this.T = T;
-    const skin = type === 'elite' ? 0x7a3fd0 : SKINS[variant % 3];
-    this.rig = buildCharacter({ kind: 'dokkaebi', skin, top: skin, pants: type === 'elite' ? 0xe0524f : 0xf2b632, hair: 0x1d1b2e });
+    const boss = type === 'boss';
+    const skin = boss ? 0xc23a2a : type === 'elite' ? 0x7a3fd0 : SKINS[variant % 3];
+    this.rig = buildCharacter({ kind: 'dokkaebi', skin, top: boss ? 0x2a1f3d : skin, pants: type === 'elite' ? 0xe0524f : boss ? 0xf1c24b : 0xf2b632, hair: boss ? 0xf1c24b : 0x1d1b2e });
     this.rig.root.scale.setScalar(0.01);
     scene.add(this.rig.root);
     this.scene = scene;
@@ -34,7 +35,9 @@ class Dokkaebi {
     this.pos.set(x, 0, z);
     this.vel = new THREE.Vector3();
     this.knock = new THREE.Vector3();
-    this.hp = Math.round(T.hp * diff.hp);
+    this.hp = boss ? Math.round(10 + diff.n * 1.2) : Math.round(T.hp * diff.hp);
+    this.slamT = 0;
+    this.summonT = 8;
     this.maxHp = this.hp;
     this.damage = T.damage;
     this.state = 'spawn';
@@ -57,10 +60,10 @@ class Dokkaebi {
     this.hp -= dmg;
     flash(this.rig, 1);
     const dx = this.pos.x - fromX, dz = this.pos.z - fromZ, d = Math.hypot(dx, dz) || 1;
-    const kb = this.type === 'elite' ? 4 : 9;
+    const kb = this.type === 'boss' ? 0.8 : this.type === 'elite' ? 4 : 9;
     this.knock.set((dx / d) * kb, 0, (dz / d) * kb);
     // big ones shrug off the interrupt unless the hit is strong
-    if (this.state === 'windup' && (this.type !== 'elite' || dmg > 1)) { this.state = 'recover'; this.t = 0; }
+    if (this.state === 'windup' && this.type !== 'boss' && (this.type !== 'elite' || dmg > 1)) { this.state = 'recover'; this.t = 0; }
     if (this.hp <= 0) { this.state = 'dying'; this.t = 0; return true; }
     return false;
   }
@@ -97,7 +100,7 @@ class Dokkaebi {
       this.pos.addScaledVector(this.knock, dt);
       this.knock.multiplyScalar(Math.pow(0.003, dt));
       if (this.t > 0.35) {
-        effects.spawn(this.pos.x, 1, this.pos.z, 0x6fb8ff, { n: this.type === 'elite' ? 24 : 14, speed: 2.5, up: 4, life: 0.8, size: 0.2, grav: -2 });
+        effects.spawn(this.pos.x, 1, this.pos.z, 0x6fb8ff, { n: this.type === 'boss' ? 60 : this.type === 'elite' ? 24 : 14, speed: 2.5, up: 4, life: 0.8, size: 0.2, grav: -2 });
         this.state = 'gone';
         this.dispose();
       }
@@ -115,6 +118,8 @@ class Dokkaebi {
           const jitter = Math.sin(this.time * 0.7 + this.speedMul * 9) * 0.5;
           const rr = safe.r + 1.1 + this.radius;
           goal = new THREE.Vector3(safe.x + Math.sin(a + jitter) * rr, 0, safe.z + Math.cos(a + jitter) * rr);
+          // the chief pounds the ground and shakes the fire while you hide
+          if (this.type === 'boss' && (this.slamT += dt) > rules.bossSlam) { this.slamT = 0; this.state = 'windup'; this.t = 0; this.slamming = true; event = 'windup'; }
         } else {
           goal = player.pos;
           if (dist < T.reach && !player.dead) { this.state = 'windup'; this.t = 0; event = 'windup'; }
@@ -131,14 +136,23 @@ class Dokkaebi {
         if (this.t >= T.windup) {
           this.state = 'recover'; this.t = 0;
           const ahead = (dx * fx + dz * fz) / (dist || 1);
-          if (dist < T.hitReach && ahead > 0.3) event = 'hitPlayer';
+          if (dist < T.hitReach && (ahead > 0.3 || this.type === 'boss')) event = 'hitPlayer';
+          if (this.type === 'boss') { event = event || (this.slamming ? 'fireSlam' : 'stomp'); this.slamming = false; }
           effects.spawn(this.pos.x + fx * 1.1 * T.scale, 0.1, this.pos.z + fz * 1.1 * T.scale, 0xd9c7a0, { n: this.type === 'elite' ? 14 : 6, speed: 2.5, up: 2, life: 0.4, size: 0.12 });
           if (this.type === 'elite') event = event || 'stomp';
+        }
+        if (this.type === 'boss') {
+          // the boss's warning circle sits around itself: area slam
+          this.warn.position.x = this.pos.x; this.warn.position.z = this.pos.z;
+          this.warn.scale.setScalar(T.hitReach * (0.7 + windup * 0.3));
         }
       } else if (this.state === 'recover') {
         windup = Math.max(0, 1 - this.t / 0.12) * 0.6;
         if (this.t > (this.type === 'elite' ? 0.9 : 0.7)) { this.state = 'chase'; this.t = 0; }
       }
+
+      // the chief calls helpers now and then
+      if (this.type === 'boss' && this.state === 'chase' && (this.summonT -= dt) <= 0) { this.summonT = 18; event = event || 'summon'; }
 
       if (goal) {
         const gx = goal.x - this.pos.x, gz = goal.z - this.pos.z, gd = Math.hypot(gx, gz);
@@ -166,7 +180,7 @@ class Dokkaebi {
       speedRatio, attack: -1, roll: -1, windup, time: this.time,
     }, dt);
     // taunting hop while waiting at the edge of the light
-    if (this.state === 'chase' && speedRatio < 0.1) {
+    if (this.state === 'chase' && speedRatio < 0.1 && this.type !== 'boss') {
       this.rig.body.position.y += Math.abs(Math.sin(this.time * 6)) * 0.12;
     }
     return event;
@@ -289,6 +303,7 @@ export class Monsters {
   }
 
   reset() {
+    this.boss = null;
     for (const m of this.list) m.dispose();
     this.list = [];
     this.spawnTimer = 2;
@@ -354,6 +369,23 @@ export class Monsters {
     return m;
   }
 
+  spawnBoss(ctx, night) {
+    const m = this.spawn(ctx, difficulty(night), 'boss');
+    this.boss = m;
+    return m;
+  }
+
+  /** two helpers pop out right next to (x,z) */
+  summon(ctx, night, x, z) {
+    const d = difficulty(night);
+    for (let i = 0; i < 2; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const m = new Dokkaebi(this.scene, x + Math.sin(a) * 2.2, z + Math.cos(a) * 2.2, this.count++, 'dokkaebi', d);
+      this.effects.spawn(m.pos.x, 0.6, m.pos.z, 0xff6a4a, { n: 10, speed: 1.5, up: 3, life: 0.7, size: 0.18, grav: -1 });
+      this.list.push(m);
+    }
+  }
+
   /** a pack from one side of the island. returns the angle they come from */
   raid(ctx, night) {
     const d = difficulty(night);
@@ -369,7 +401,11 @@ export class Monsters {
   /** talisman / dawn: send everything in range away */
   banishNear(x, z, r) {
     let n = 0;
-    for (const m of this.list) if (m.alive && Math.hypot(m.pos.x - x, m.pos.z - z) < r) { m.banish(x, z); n++; }
+    for (const m of this.list) {
+      if (!m.alive || Math.hypot(m.pos.x - x, m.pos.z - z) >= r) continue;
+      if (m.type === 'boss') { m.hit(3, x, z); m.knock.multiplyScalar(6); continue; } // the chief only staggers
+      m.banish(x, z); n++;
+    }
     return n;
   }
 

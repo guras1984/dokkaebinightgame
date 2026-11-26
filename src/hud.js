@@ -75,6 +75,9 @@ export class Hud {
     e.clockText.textContent = s.phase === 'night' ? `${d} 밤 · ${mm}:${ss}` : s.phase === 'day' ? `${d} 낮 · ${mm}:${ss}` : s.phase === 'dusk' ? `${d} 해질녘` : `${d} 새벽`;
     e.clockFill.style.width = `${s.progress * 100}%`;
     e.clock.classList.toggle('night', s.phase === 'night');
+    const bb = $('boss-bar');
+    if (bb.hidden === !!s.boss) bb.hidden = !s.boss;
+    if (s.boss) $('boss-fill').style.width = `${Math.max(0, s.boss.hp / s.boss.maxHp) * 100}%`;
 
     if (s.actionLabel !== this.lastAction) {
       e.actionLabel.textContent = s.actionLabel;
