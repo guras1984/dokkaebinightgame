@@ -162,7 +162,6 @@ function startGame(save = null) {
   saveGame(); // morning of day 1 is a checkpoint too
   const intro = () => {
     hud.banner('1일째 아침', '백 일 밤을 버텨라', 2.6);
-    setTimeout(() => { if (state === 'playing' && day === 1) hud.toast('섬 어딘가 노란 ! 표시: 갇힌 사람이 있다', 3.4); }, 2600);
   };
   if (!store.get('dokkaebi.prologue') && params.get('skipstory') !== '1') {
     store.set('dokkaebi.prologue', '1');
@@ -375,7 +374,7 @@ function tryAction() {
     const v = village.free(lair);
     sfx('chest');
     player.stats.rescued = (player.stats.rescued || 0) + 1;
-    talk(v.def.rescue.map((text) => ({ who: v.def.name, role: v.def.role, text })), () => hud.toast(`${v.def.name}을(를) 모닥불까지 데려가자`, 3));
+    talk(v.def.rescue.map((text) => ({ who: v.def.name, role: v.def.role, text })));
     return;
   }
   const npc = village.talkable(player.pos.x, player.pos.z);
@@ -528,24 +527,23 @@ function craft(id) {
     world.fire.fuel = Math.min(world.fire.max, world.fire.fuel + 25);
     effects.spawn(world.fire.x, 1, world.fire.z, 0xffb03a, { n: 30, speed: 4, up: 7, life: 1, size: 0.16, grav: 4 });
     camera.shake = 0.6;
-    hud.banner('모닥불이 커졌다!', `불빛이 더 멀리 닿는다 (Lv.${world.fire.level + 1})`, 2.2);
+    hud.popup('모닥불이 커졌다!', { x: player.pos.x, y: 2.8, z: player.pos.z }, camera.cam, 'fire big');
   } else if (id === 'steelaxe') {
     player.setAxe(2);
     effects.spawn(player.pos.x, 1.4, player.pos.z, 0x9fc4ff, { n: 24, speed: 3, up: 5, life: 0.8, size: 0.12, grav: 4 });
-    hud.banner('강철 도끼!', '세 배로 세게 벤다', 2.2);
+    hud.popup('강철 도끼!', { x: player.pos.x, y: 2.8, z: player.pos.z }, camera.cam, 'fire big');
   } else if (id === 'armor') {
     player.setArmor(true);
     effects.spawn(player.pos.x, 1.2, player.pos.z, 0xc98a4d, { n: 20, speed: 3, up: 4, life: 0.8, size: 0.12, grav: 4 });
-    hud.banner('가죽 갑옷!', '받는 피해가 줄었다', 2.2);
+    hud.popup('가죽 갑옷!', { x: player.pos.x, y: 2.8, z: player.pos.z }, camera.cam, 'fire big');
   } else if (id === 'axe') {
     player.setAxe(true);
     effects.spawn(player.pos.x, 1.4, player.pos.z, 0xeaf2ff, { n: 20, speed: 3, up: 5, life: 0.8, size: 0.12, grav: 4 });
-    hud.banner('쇠도끼!', '두 배로 세게 벤다', 2.2);
+    hud.popup('쇠도끼!', { x: player.pos.x, y: 2.8, z: player.pos.z }, camera.cam, 'fire big');
   } else if (r.gives) {
     const n = r.amount || 1;
     player.inv[r.gives] += n;
     hud.collect(r.gives, n, at, camera.cam, 250);
-    hud.toast(`${ITEMS[r.gives].name}을(를) 만들었다`, 1.4);
   }
 }
 
@@ -710,12 +708,10 @@ function updateVillage(dt, c, darkness) {
       l.guards = monsters.spawnGuards(day, l.def.guards, l.x, l.z);
       sfx('drum'); sfx('laugh', 0.2, 1);
       hud.popup(l.def.cage, { x: l.x, y: 3.2, z: l.z }, camera.cam, 'fire big');
-      hud.toast('소굴을 지키는 도깨비들이다! 모두 물리치자', 2.8);
       camera.shake = 0.6;
     } else if (l.state === 'guarded' && l.guards.every((m) => !m.alive)) {
       l.state = 'cleared';
       sfx('chest');
-      hud.toast(`지키던 도깨비를 다 물리쳤다! 우리로 가서 "구하기"`, 3);
     }
   }
 }
@@ -826,8 +822,6 @@ function tick(dt) {
     player.hp = Math.max(0, player.hp - rules.needDamage * gdt * ((player.water <= 0) + (player.food <= 0)));
     if (player.hp <= 0) player.dead = true;
   }
-  if (player.water < 25) beat('thirst', '목이 마르다! 물가나 우물에서 물을 마시자', 3);
-  if (player.food < 25) beat('hunger', '배가 고프다! 산딸기나 고기를 먹자', 3);
 
   const nightP = phase === 'night' ? daynight.progress() : -1;
   const events = monsters.update(dt, c, nightP, day);
@@ -872,7 +866,6 @@ function tick(dt) {
   }
 
   // story beats
-  if (phase === 'day' && daynight.remaining() < 30) beat('late', '곧 해가 진다. 모닥불에 장작을 넣자', 3);
   const bossNight = day % rules.bossEvery === 0;
   if (phase === 'night' && !announced.nightIntro) {
     announced.nightIntro = true;
@@ -892,11 +885,10 @@ function tick(dt) {
   }
   if (phase === 'dusk' && !announced.dusk) {
     announced.dusk = true; sfx('gong');
-    if (bossNight) hud.banner(`${day}일째 밤 · 대장의 밤`, '오늘 밤 도깨비 대장이 온다', 3, 'raid');
-    else hud.banner(`${day}일째 밤이 온다`, day === 1 ? '도깨비는 불빛 안으로 못 들어온다' : '어제보다 더 많이 온다', 2.6);
+    if (day < 3 && !bossNight) hud.banner(`${day}일째 밤이 온다`, day === 1 ? '도깨비는 불빛 안으로 못 들어온다' : '어제보다 더 많이 온다', 2.6);
   }
   if (phase === 'night') {
-    if (day >= 2 && nightP > 0.07) beat('wispTip', day === 2 ? '도깨비불은 번쩍이면 돌진한다. 구르기로 피하자' : '도깨비가 몰려온다!', 3);
+    if (day === 2 && nightP > 0.07) beat('wispTip', '도깨비불은 번쩍이면 돌진한다. 구르기로 피하자', 3);
     if (nightP > rules.nightChestAt && !announced.nightChest) {
       announced.nightChest = true;
       if (camp.spawnChest('night', 15, 26)) hud.toast('멀리서 도깨비 보물 궤짝이 빛난다!', 3);
@@ -915,7 +907,6 @@ function tick(dt) {
       hud.banner('도깨비 습격!', '둥둥둥… 북소리가 들린다', 2.8, 'raid');
       camera.shake = 1;
     }
-    if (daynight.remaining() < 20) beat('almost', '조금만 더! 곧 새벽이다', 2.5);
   }
 
   if (player.dead) { endGame(false); }

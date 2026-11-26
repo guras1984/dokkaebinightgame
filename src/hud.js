@@ -104,7 +104,17 @@ export class Hud {
 
     if (this.toastTimer > 0) {
       this.toastTimer -= s.dt;
-      if (this.toastTimer <= 0) e.toast.classList.remove('show');
+      if (this.toastTimer <= 0) {
+        if (this.toastGap) {
+          const n = this.toastGap; this.toastGap = null;
+          this.showToast(n.text, n.secs);
+        } else {
+          e.toast.classList.remove('show');
+          this.toastNow = null;
+          const next = this.toastQ && this.toastQ.shift();
+          if (next) { this.toastGap = next; this.toastTimer = 0.35; } // short gap, then the next one
+        }
+      }
     }
     if (this.bannerTimer > 0) {
       this.bannerTimer -= s.dt;
@@ -112,10 +122,19 @@ export class Hud {
     }
   }
 
+  /** one message at a time: new ones wait their turn (duplicates and long queues are dropped) */
   toast(text, secs = 2.4) {
+    this.toastQ = this.toastQ || [];
+    if (this.toastNow === text || this.toastQ.some((t) => t.text === text)) return;
+    if (this.toastTimer > 0) { if (this.toastQ.length < 2) this.toastQ.push({ text, secs }); return; }
+    this.showToast(text, secs);
+  }
+
+  showToast(text, secs) {
+    this.toastNow = text;
     this.el.toast.textContent = text;
     this.el.toast.classList.add('show');
-    this.toastTimer = secs;
+    this.toastTimer = Math.min(secs, 2.6);
   }
 
   /** big centre text for day changes and raids */
