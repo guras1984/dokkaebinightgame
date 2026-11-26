@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { tune, rules } from './config.js';
 import { buildCharacter, animateCharacter, flash } from './character.js';
+import { emptyInventory } from './items.js';
 
 const angDiff = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
 
@@ -18,7 +19,8 @@ export class Player {
     this.vel.set(0, 0, 0);
     this.facing = Math.PI / 4;  // face the camera at the start
     this.hp = rules.playerHp;
-    this.wood = 0;
+    this.inv = emptyInventory();
+    this.setAxe(false);
     this.attackT = -1;          // 0..1 while swinging
     this.attackHit = false;
     this.rollT = -1;
@@ -31,10 +33,23 @@ export class Player {
     this.knock = new THREE.Vector3();
     this.dead = false;
     this.time = 0;
-    this.stats = { trees: 0, kills: 0, wood: 0, fed: 0 };
+    this.stats = { trees: 0, kills: 0, wood: 0, fed: 0, chests: 0, built: 0, rocks: 0 };
     this.rig.root.rotation.y = this.facing;
     this.rig.root.visible = true;
   }
+
+  /** stone axe at the start, shiny bigger iron axe once crafted */
+  setAxe(iron) {
+    this.ironAxe = iron;
+    const [, blade, edge] = this.rig.weapon.children;
+    blade.material.color.setHex(iron ? 0xc7cdd6 : 0x8b8478);
+    edge.material.color.setHex(iron ? 0xf6faff : 0xa69f92);
+    const k = iron ? 1.3 : 1;
+    blade.scale.set(1, k, k); edge.scale.set(1, k, 1);
+  }
+
+  get wood() { return this.inv.wood; }
+  set wood(v) { this.inv.wood = v; }
 
   get rolling() { return this.rollT >= 0; }
   get attacking() { return this.attackT >= 0; }

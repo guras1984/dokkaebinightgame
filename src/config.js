@@ -58,4 +58,43 @@ export const rules = {
   spawnEnd: 3.2,
   capStart: 3,
   capEnd: 8,
+
+  // --- v0.2: many nights ---
+  totalNights: 100,
+  dawnHeal: 30,         // hp restored each morning
+  regrowShare: 0.6,     // share of felled trees / mined rocks that come back each morning
+  rockHp: 4,
+  stonePerRock: 2,
+  fireLevels: [100, 140, 185],   // max fuel per campfire level
+  herbHeal: 40,
+  charmRadius: 7.5,
+  lanternRadius: 3.4,
+  lanternMax: 4,
+  fenceMax: 24,
+  dayChests: 2,
+  nightChestAt: 0.25,   // night progress when the glowing chest appears
+  raidAt: 0.55,         // night progress of the raid (from night 2)
+  hitStop: 0.05,
+  killStop: 0.09,
+};
+
+/** how hard night n (1-based) is */
+export function difficulty(n) {
+  const k = n - 1;
+  return {
+    capStart: Math.min(10, rules.capStart + k * 0.8),
+    capEnd: Math.min(18, rules.capEnd + k * 1.2),
+    spawnMul: Math.max(0.55, 1 - k * 0.06),       // shorter gaps between spawns
+    speedMul: 1 + Math.min(0.35, k * 0.04),
+    hp: rules.monsterHp + Math.floor(k / 3),
+    wisp: n >= 2 ? Math.min(0.4, 0.18 + k * 0.03) : 0,
+    elite: n >= 3 ? Math.min(0.28, 0.07 + (n - 3) * 0.03) : 0,
+    raid: n >= 2 ? Math.min(14, 3 + n) : 0,
+  };
+}
+
+export const MONSTER_TYPES = {
+  dokkaebi: { hp: 1, damage: 15, speed: 3.3, windup: 0.55, scale: 1, radius: 0.5, reach: 1.45, hitReach: 1.9, beads: 1 },
+  elite:    { hp: 2.6, damage: 26, speed: 2.7, windup: 0.8, scale: 1.5, radius: 0.75, reach: 2.0, hitReach: 2.6, beads: 3 },
+  wisp:     { hp: 1, damage: 12, speed: 5.4, scale: 1, radius: 0.35, beads: 1 },
 };

@@ -6,6 +6,7 @@ const DEADZONE = 0.12;
 const CODE_MAP = {
   KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', KeyJ: 'j', KeyK: 'k', KeyP: 'p',
   ArrowUp: 'arrowup', ArrowDown: 'arrowdown', ArrowLeft: 'arrowleft', ArrowRight: 'arrowright',
+  KeyC: 'c', Digit1: '1', Digit2: '2', Digit3: '3', Digit4: '4',
   Space: ' ', ShiftLeft: 'shift', ShiftRight: 'shift', Escape: 'escape',
 };
 function keyName(e) {
@@ -49,6 +50,8 @@ export class Input {
         if (k === 'j' || k === ' ') this.pressed.add('action');
         if (k === 'k' || k === 'shift') this.pressed.add('roll');
         if (k === 'p' || k === 'escape') this.pressed.add('pause');
+        if (k === 'c') this.pressed.add('craft');
+        if (['1', '2', '3', '4'].includes(k)) this.pressed.add('slot' + k);
       }
       this.keys.add(k);
     } else {

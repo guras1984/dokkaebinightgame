@@ -1,13 +1,32 @@
 import * as THREE from 'three';
-import { rules } from './config.js';
+import { rules, difficulty, MONSTER_TYPES } from './config.js';
 import { buildCharacter, animateCharacter, flash } from './character.js';
 
 const angDiff = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
 const SKINS = [0x5b8cff, 0xe0524f, 0x6fcf7a];
 
+/** the safe circle containing p, if any */
+function zoneAt(zones, p, inset = 0.2) {
+  for (const z of zones) if (Math.hypot(p.x - z.x, p.z - z.z) < z.r - inset) return z;
+  return null;
+}
+/** keep p outside every safe circle */
+function pushOut(zones, p, pad) {
+  for (const z of zones) {
+    const dx = p.x - z.x, dz = p.z - z.z, d = Math.hypot(dx, dz) || 1, edge = z.r + pad;
+    if (d < edge) { p.x = z.x + (dx / d) * edge; p.z = z.z + (dz / d) * edge; }
+  }
+}
+
+const ringGeo = new THREE.RingGeometry(0.7, 1, 32);
+
 class Dokkaebi {
-  constructor(scene, x, z, variant) {
-    this.rig = buildCharacter({ kind: 'dokkaebi', skin: SKINS[variant % 3], top: SKINS[variant % 3], pants: 0xf2b632, hair: 0x1d1b2e });
+  constructor(scene, x, z, variant, type, diff) {
+    const T = MONSTER_TYPES[type];
+    this.type = type;
+    this.T = T;
+    const skin = type === 'elite' ? 0x7a3fd0 : SKINS[variant % 3];
+    this.rig = buildCharacter({ kind: 'dokkaebi', skin, top: skin, pants: type === 'elite' ? 0xe0524f : 0xf2b632, hair: 0x1d1b2e });
     this.rig.root.scale.setScalar(0.01);
     scene.add(this.rig.root);
     this.scene = scene;
@@ -15,88 +34,115 @@ class Dokkaebi {
     this.pos.set(x, 0, z);
     this.vel = new THREE.Vector3();
     this.knock = new THREE.Vector3();
-    this.hp = rules.monsterHp;
+    this.hp = Math.round(T.hp * diff.hp);
+    this.maxHp = this.hp;
+    this.damage = T.damage;
     this.state = 'spawn';
     this.t = 0;
     this.time = Math.random() * 10;
     this.facing = Math.atan2(-x, -z);
-    this.radius = 0.5;
-    this.speedMul = 0.9 + Math.random() * 0.25;
+    this.radius = T.radius;
+    this.speedMul = (0.9 + Math.random() * 0.25) * diff.speedMul;
+    // red warning circle on the ground before the club comes down
+    this.warn = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xff3b3b, transparent: true, opacity: 0, depthWrite: false }));
+    this.warn.rotation.x = -Math.PI / 2;
+    this.warn.position.y = 0.04;
+    scene.add(this.warn);
   }
 
   get alive() { return this.state !== 'dying' && this.state !== 'gone'; }
 
-  hit(fromX, fromZ) {
+  hit(dmg, fromX, fromZ) {
     if (!this.alive) return false;
-    this.hp -= 1;
+    this.hp -= dmg;
     flash(this.rig, 1);
     const dx = this.pos.x - fromX, dz = this.pos.z - fromZ, d = Math.hypot(dx, dz) || 1;
-    this.knock.set((dx / d) * 9, 0, (dz / d) * 9);
-    if (this.state === 'windup') { this.state = 'recover'; this.t = 0; } // interrupt
+    const kb = this.type === 'elite' ? 4 : 9;
+    this.knock.set((dx / d) * kb, 0, (dz / d) * kb);
+    // big ones shrug off the interrupt unless the hit is strong
+    if (this.state === 'windup' && (this.type !== 'elite' || dmg > 1)) { this.state = 'recover'; this.t = 0; }
     if (this.hp <= 0) { this.state = 'dying'; this.t = 0; return true; }
     return false;
   }
 
-  banish() { if (this.alive) { this.state = 'dying'; this.t = 0; } }
+  banish(fromX, fromZ) {
+    if (!this.alive) return;
+    if (fromX !== undefined) {
+      const dx = this.pos.x - fromX, dz = this.pos.z - fromZ, d = Math.hypot(dx, dz) || 1;
+      this.knock.set((dx / d) * 14, 0, (dz / d) * 14);
+    }
+    this.state = 'dying'; this.t = 0;
+  }
+
+  dispose() { this.scene.remove(this.rig.root); this.scene.remove(this.warn); }
 
   update(dt, ctx) {
     this.time += dt;
     this.t += dt;
-    const { player, world, fireR, effects } = ctx;
+    const { player, world, zones, effects } = ctx;
+    const T = this.T;
     const before = this.pos.clone();
     let windup = 0, speedRatio = 0;
     let event = null;
+    this.warn.material.opacity = 0;
 
     if (this.state === 'spawn') {
       const s = Math.min(1, this.t / 0.5);
-      this.rig.root.scale.setScalar(s * (1.15 - 0.15 * s) * 1.0);
-      if (this.t > 0.5) { this.rig.root.scale.setScalar(1); this.state = 'chase'; this.t = 0; }
+      this.rig.root.scale.setScalar(s * (1.15 - 0.15 * s) * T.scale);
+      if (this.t > 0.5) { this.rig.root.scale.setScalar(T.scale); this.state = 'chase'; this.t = 0; }
     } else if (this.state === 'dying') {
       const s = Math.max(0, 1 - this.t / 0.35);
-      this.rig.root.scale.setScalar(s);
+      this.rig.root.scale.setScalar(s * T.scale);
       this.rig.root.rotation.y += dt * 20;
+      this.pos.addScaledVector(this.knock, dt);
+      this.knock.multiplyScalar(Math.pow(0.003, dt));
       if (this.t > 0.35) {
-        effects.spawn(this.pos.x, 1, this.pos.z, 0x6fb8ff, { n: 14, speed: 2.5, up: 4, life: 0.8, size: 0.2, grav: -2 });
+        effects.spawn(this.pos.x, 1, this.pos.z, 0x6fb8ff, { n: this.type === 'elite' ? 24 : 14, speed: 2.5, up: 4, life: 0.8, size: 0.2, grav: -2 });
         this.state = 'gone';
-        this.scene.remove(this.rig.root);
+        this.dispose();
       }
       return null;
     } else {
       const dx = player.pos.x - this.pos.x, dz = player.pos.z - this.pos.z;
       const dist = Math.hypot(dx, dz);
-      const pf = Math.hypot(player.pos.x - world.fire.x, player.pos.z - world.fire.z);
-      const playerSafe = fireR > 0 && pf < fireR - 0.2;
+      const safe = zoneAt(zones, player.pos);
       let goal = null;
 
       if (this.state === 'chase') {
-        if (playerSafe) {
+        if (safe) {
           // wait just outside the light, on the player's side
-          const a = Math.atan2(player.pos.x - world.fire.x, player.pos.z - world.fire.z);
+          const a = Math.atan2(player.pos.x - safe.x, player.pos.z - safe.z);
           const jitter = Math.sin(this.time * 0.7 + this.speedMul * 9) * 0.5;
-          goal = new THREE.Vector3(Math.sin(a + jitter) * (fireR + 1.1), 0, Math.cos(a + jitter) * (fireR + 1.1));
+          const rr = safe.r + 1.1 + this.radius;
+          goal = new THREE.Vector3(safe.x + Math.sin(a + jitter) * rr, 0, safe.z + Math.cos(a + jitter) * rr);
         } else {
           goal = player.pos;
-          if (dist < 1.45 && !player.dead) { this.state = 'windup'; this.t = 0; }
+          if (dist < T.reach && !player.dead) { this.state = 'windup'; this.t = 0; }
         }
       } else if (this.state === 'windup') {
-        windup = this.t / rules.monsterWindup;
-        this.facing += angDiff(this.facing, Math.atan2(dx, dz)) * Math.min(1, dt * 6);
-        if (this.t >= rules.monsterWindup) {
+        windup = this.t / T.windup;
+        this.facing += angDiff(this.facing, Math.atan2(dx, dz)) * Math.min(1, dt * (this.type === 'elite' ? 3 : 6));
+        const fx = Math.sin(this.facing), fz = Math.cos(this.facing);
+        const wr = T.hitReach * 0.55;
+        this.warn.position.x = this.pos.x + fx * wr;
+        this.warn.position.z = this.pos.z + fz * wr;
+        this.warn.scale.setScalar(wr * (0.6 + windup * 0.45));
+        this.warn.material.opacity = 0.25 + windup * 0.5;
+        if (this.t >= T.windup) {
           this.state = 'recover'; this.t = 0;
-          this.lunge = 1;
-          const fx = Math.sin(this.facing), fz = Math.cos(this.facing);
           const ahead = (dx * fx + dz * fz) / (dist || 1);
-          if (dist < 1.9 && ahead > 0.3) event = 'hitPlayer';
-          effects.spawn(this.pos.x + fx * 1.1, 0.1, this.pos.z + fz * 1.1, 0xd9c7a0, { n: 6, speed: 2, up: 2, life: 0.4, size: 0.1 });
+          if (dist < T.hitReach && ahead > 0.3) event = 'hitPlayer';
+          effects.spawn(this.pos.x + fx * 1.1 * T.scale, 0.1, this.pos.z + fz * 1.1 * T.scale, 0xd9c7a0, { n: this.type === 'elite' ? 14 : 6, speed: 2.5, up: 2, life: 0.4, size: 0.12 });
+          if (this.type === 'elite') event = event || 'stomp';
         }
       } else if (this.state === 'recover') {
         windup = Math.max(0, 1 - this.t / 0.12) * 0.6;
-        if (this.t > 0.7) { this.state = 'chase'; this.t = 0; }
+        if (this.t > (this.type === 'elite' ? 0.9 : 0.7)) { this.state = 'chase'; this.t = 0; }
       }
 
       if (goal) {
         const gx = goal.x - this.pos.x, gz = goal.z - this.pos.z, gd = Math.hypot(gx, gz);
-        const sp = rules.monsterSpeed * this.speedMul * (gd < 0.4 ? 0 : 1);
+        const sp = T.speed * this.speedMul * (gd < 0.4 ? 0 : 1);
         this.vel.lerp(new THREE.Vector3((gx / (gd || 1)) * sp, 0, (gz / (gd || 1)) * sp), Math.min(1, dt * 6));
         if (gd > 0.3) this.facing += angDiff(this.facing, Math.atan2(gx, gz)) * Math.min(1, dt * 8);
         else this.facing += angDiff(this.facing, Math.atan2(dx, dz)) * Math.min(1, dt * 4);
@@ -108,25 +154,126 @@ class Dokkaebi {
       this.pos.addScaledVector(this.knock, dt);
       this.knock.multiplyScalar(Math.pow(0.003, dt));
 
-      // the firelight burns: push out of the safe circle
-      if (fireR > 0) {
-        const fx = this.pos.x - world.fire.x, fz = this.pos.z - world.fire.z, fd = Math.hypot(fx, fz) || 1;
-        const edge = fireR + 0.4;
-        if (fd < edge) { this.pos.x = (fx / fd) * edge; this.pos.z = (fz / fd) * edge; }
-      }
+      // the light burns: push out of every safe circle
+      pushOut(zones, this.pos, 0.4 + this.radius * 0.5);
       world.resolve(this.pos, this.radius);
       speedRatio = Math.min(1, Math.hypot(this.pos.x - before.x, this.pos.z - before.z) / dt / 4);
     }
 
     this.rig.root.rotation.y = this.facing;
     animateCharacter(this.rig, {
-      dist: Math.hypot(this.pos.x - before.x, this.pos.z - before.z),
+      dist: Math.hypot(this.pos.x - before.x, this.pos.z - before.z) / T.scale,
       speedRatio, attack: -1, roll: -1, windup, time: this.time,
     }, dt);
     // taunting hop while waiting at the edge of the light
     if (this.state === 'chase' && speedRatio < 0.1) {
       this.rig.body.position.y += Math.abs(Math.sin(this.time * 6)) * 0.12;
     }
+    return event;
+  }
+}
+
+// 도깨비불: a floating ghost-fire that circles, flashes, then dashes into you.
+const wispCore = new THREE.IcosahedronGeometry(0.22, 0);
+const wispShell = new THREE.IcosahedronGeometry(0.42, 0);
+class Wisp {
+  constructor(scene, x, z, diff) {
+    this.type = 'wisp';
+    this.T = MONSTER_TYPES.wisp;
+    this.scene = scene;
+    this.root = new THREE.Group();
+    this.core = new THREE.Mesh(wispCore, new THREE.MeshBasicMaterial({ color: 0xeaf8ff }));
+    this.shell = new THREE.Mesh(wispShell, new THREE.MeshBasicMaterial({ color: 0x4fa8ff, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
+    this.root.add(this.core, this.shell);
+    this.root.scale.setScalar(0.01);
+    scene.add(this.root);
+    this.pos = this.root.position;
+    this.pos.set(x, 1.1, z);
+    this.vel = new THREE.Vector3();
+    this.knock = new THREE.Vector3();
+    this.hp = 1;
+    this.maxHp = 1;
+    this.damage = this.T.damage;
+    this.radius = this.T.radius;
+    this.speedMul = diff.speedMul;
+    this.state = 'spawn';
+    this.t = 0;
+    this.time = Math.random() * 10;
+    this.orbitA = Math.random() * Math.PI * 2;
+    this.orbitDir = Math.random() < 0.5 ? -1 : 1;
+    this.next = 1.6 + Math.random();
+    this.dash = new THREE.Vector3();
+  }
+
+  get alive() { return this.state !== 'dying' && this.state !== 'gone'; }
+
+  hit() {
+    if (!this.alive) return false;
+    this.state = 'dying'; this.t = 0;
+    return true;
+  }
+
+  banish() { if (this.alive) { this.state = 'dying'; this.t = 0; } }
+
+  dispose() { this.scene.remove(this.root); }
+
+  update(dt, ctx) {
+    this.time += dt;
+    this.t += dt;
+    const { player, zones, effects } = ctx;
+    let event = null;
+    const pulse = 1 + Math.sin(this.time * 9) * 0.08;
+
+    if (this.state === 'spawn') {
+      this.root.scale.setScalar(Math.min(1, this.t / 0.4) * pulse);
+      if (this.t > 0.4) { this.state = 'orbit'; this.t = 0; }
+    } else if (this.state === 'dying') {
+      this.root.scale.setScalar(Math.max(0, 1 - this.t / 0.2) * 1.6);
+      if (this.t > 0.2) {
+        effects.spawn(this.pos.x, this.pos.y, this.pos.z, 0x7fc8ff, { n: 12, speed: 3.5, up: 2, life: 0.6, size: 0.16, grav: -1 });
+        this.state = 'gone'; this.dispose();
+      }
+      return null;
+    } else {
+      const safe = zoneAt(zones, player.pos);
+      const cx = safe ? safe.x : player.pos.x, cz = safe ? safe.z : player.pos.z;
+      const orbitR = safe ? safe.r + 1.4 : 4.6;
+      if (this.state === 'orbit') {
+        this.orbitA += this.orbitDir * dt * (safe ? 0.35 : 1.1);
+        const gx = cx + Math.sin(this.orbitA) * orbitR, gz = cz + Math.cos(this.orbitA) * orbitR;
+        this.vel.lerp(new THREE.Vector3(gx - this.pos.x, 0, gz - this.pos.z).multiplyScalar(2.2), Math.min(1, dt * 3));
+        this.root.scale.setScalar(pulse);
+        if (!safe && this.t > this.next && !player.dead) { this.state = 'aim'; this.t = 0; }
+      } else if (this.state === 'aim') {
+        // tell: shiver and flash white before the dash
+        this.vel.multiplyScalar(Math.pow(0.01, dt));
+        this.root.scale.setScalar(1.25 + Math.sin(this.time * 50) * 0.12);
+        this.shell.material.color.setHex(Math.floor(this.t * 14) % 2 ? 0xffffff : 0x4fa8ff);
+        if (this.t > 0.45) {
+          this.state = 'dash'; this.t = 0;
+          this.dash.set(player.pos.x - this.pos.x, 0, player.pos.z - this.pos.z).normalize().multiplyScalar(this.T.speed * 2.3 * this.speedMul);
+          this.shell.material.color.setHex(0x4fa8ff);
+        }
+      } else if (this.state === 'dash') {
+        this.vel.copy(this.dash);
+        if (Math.random() < 0.5) effects.spawn(this.pos.x, this.pos.y, this.pos.z, 0x4fa8ff, { n: 1, speed: 0.3, up: 0.5, life: 0.35, size: 0.18, grav: 0 });
+        const d = Math.hypot(player.pos.x - this.pos.x, player.pos.z - this.pos.z);
+        if (d < 0.85 && !player.rolling) {
+          event = 'hitPlayer';
+          this.state = 'dying'; this.t = 0;
+        } else if (this.t > 0.6) {
+          this.state = 'orbit'; this.t = 0; this.next = 1.4 + Math.random() * 1.6;
+          this.orbitA = Math.atan2(this.pos.x - cx, this.pos.z - cz);
+        }
+      }
+      this.pos.x += this.vel.x * dt; this.pos.z += this.vel.z * dt;
+      pushOut(zones, this.pos, 0.5);
+      const R = rules.islandRadius;
+      const dd = Math.hypot(this.pos.x, this.pos.z);
+      if (dd > R) { this.pos.x *= R / dd; this.pos.z *= R / dd; }
+    }
+    this.pos.y = 1.1 + Math.sin(this.time * 3) * 0.18;
+    this.core.rotation.y += dt * 3; this.shell.rotation.x += dt * 2;
     return event;
   }
 }
@@ -141,7 +288,7 @@ export class Monsters {
   }
 
   reset() {
-    for (const m of this.list) this.scene.remove(m.rig.root);
+    for (const m of this.list) m.dispose();
     this.list = [];
     this.spawnTimer = 2;
     this.count = 0;
@@ -149,14 +296,16 @@ export class Monsters {
 
   get alive() { return this.list.filter((m) => m.alive); }
 
-  update(dt, ctx, nightProgress) {
+  update(dt, ctx, nightProgress, night) {
     if (nightProgress >= 0) {
-      const interval = rules.spawnStart + (rules.spawnEnd - rules.spawnStart) * nightProgress;
-      const cap = Math.round(rules.capStart + (rules.capEnd - rules.capStart) * nightProgress);
+      const d = difficulty(night);
+      const interval = (rules.spawnStart + (rules.spawnEnd - rules.spawnStart) * nightProgress) * d.spawnMul;
+      const cap = Math.round(d.capStart + (d.capEnd - d.capStart) * nightProgress);
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0 && this.alive.length < cap) {
         this.spawnTimer = interval;
-        this.spawn(ctx);
+        const r = Math.random();
+        this.spawn(ctx, d, r < d.elite ? 'elite' : r < d.elite + d.wisp ? 'wisp' : 'dokkaebi');
       }
     }
     const events = [];
@@ -168,7 +317,7 @@ export class Monsters {
     const al = this.alive;
     for (let i = 0; i < al.length; i++) for (let j = i + 1; j < al.length; j++) {
       const a = al[i].pos, b = al[j].pos;
-      const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz), min = 1.0;
+      const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz), min = al[i].radius + al[j].radius;
       if (d < min && d > 1e-4) {
         const push = (min - d) / 2;
         a.x -= (dx / d) * push; a.z -= (dz / d) * push;
@@ -179,21 +328,48 @@ export class Monsters {
     return events;
   }
 
-  spawn(ctx) {
-    // appear in the dark, away from the player
-    const { player } = ctx;
+  /** place a monster in the dark, away from the player (or around angle `dir` for a raid) */
+  spawn(ctx, diff, type, dir) {
+    const { player, zones } = ctx;
     let x = 0, z = 0;
-    for (let k = 0; k < 10; k++) {
-      const a = Math.random() * Math.PI * 2;
-      const r = 14 + Math.random() * 11;
-      x = player.pos.x + Math.cos(a) * r; z = player.pos.z + Math.sin(a) * r;
+    for (let k = 0; k < 12; k++) {
+      if (dir !== undefined) {
+        const a = dir + (Math.random() - 0.5) * 0.9, r = 19 + Math.random() * 6;
+        x = Math.sin(a) * r; z = Math.cos(a) * r;
+      } else {
+        const a = Math.random() * Math.PI * 2;
+        const r = 14 + Math.random() * 11;
+        x = player.pos.x + Math.cos(a) * r; z = player.pos.z + Math.sin(a) * r;
+      }
       const d = Math.hypot(x, z);
       if (d > 27) { x *= 26 / d; z *= 26 / d; }
-      if (Math.hypot(x - player.pos.x, z - player.pos.z) > 11 && Math.hypot(x, z) > ctx.fireR + 2) break;
+      const farFromPlayer = Math.hypot(x - player.pos.x, z - player.pos.z) > 9;
+      if (farFromPlayer && !zones.some((s) => Math.hypot(x - s.x, z - s.z) < s.r + 2)) break;
     }
-    const m = new Dokkaebi(this.scene, x, z, this.count++);
-    this.effects.spawn(x, 0.6, z, 0x6fb8ff, { n: 10, speed: 1.5, up: 3, life: 0.7, size: 0.18, grav: -1 });
+    const m = type === 'wisp' ? new Wisp(this.scene, x, z, diff) : new Dokkaebi(this.scene, x, z, this.count, type, diff);
+    this.count++;
+    this.effects.spawn(x, 0.6, z, type === 'elite' ? 0xb07aff : 0x6fb8ff, { n: 10, speed: 1.5, up: 3, life: 0.7, size: 0.18, grav: -1 });
     this.list.push(m);
+    return m;
+  }
+
+  /** a pack from one side of the island. returns the angle they come from */
+  raid(ctx, night) {
+    const d = difficulty(night);
+    const dir = Math.random() * Math.PI * 2;
+    for (let i = 0; i < d.raid; i++) {
+      const r = Math.random();
+      const type = i === 0 && night >= 3 ? 'elite' : r < d.wisp * 0.6 ? 'wisp' : 'dokkaebi';
+      this.spawn(ctx, d, type, dir);
+    }
+    return dir;
+  }
+
+  /** talisman / dawn: send everything in range away */
+  banishNear(x, z, r) {
+    let n = 0;
+    for (const m of this.list) if (m.alive && Math.hypot(m.pos.x - x, m.pos.z - z) < r) { m.banish(x, z); n++; }
+    return n;
   }
 
   banishAll() { for (const m of this.list) m.banish(); }

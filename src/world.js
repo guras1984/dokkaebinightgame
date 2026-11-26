@@ -14,6 +14,7 @@ export class World {
     this.scene = scene;
     this.colliders = [];   // static circles {x,z,r}
     this.trees = [];
+    this.rocks = [];
     this.group = new THREE.Group();
     scene.add(this.group);
     const rand = rng(1984);
@@ -108,20 +109,37 @@ export class World {
     this.glow.position.y = 0.02;
     g.add(this.glow);
 
-    this.fire = { x: 0, z: 0, group: g, fuel: rules.fireStart };
+    this.fire = { x: 0, z: 0, group: g, fuel: rules.fireStart, level: 0, max: rules.fireLevels[0] };
+    this.fireStones = g.children.slice(0, 9);
     this.colliders.push({ x: 0, z: 0, r: 0.95 });
+  }
+
+  setFireLevel(level) {
+    const f = this.fire;
+    f.level = level;
+    f.max = rules.fireLevels[level];
+    const k = 1 + level * 0.25;
+    this.fireStones.forEach((st, i) => {
+      const a = (i / 9) * Math.PI * 2;
+      st.position.set(Math.cos(a) * 0.75 * k, 0.12 * k, Math.sin(a) * 0.75 * k);
+      st.scale.setScalar(k);
+    });
+    // nicer stones once upgraded
+    const c = [0x8d8f99, 0xb7a58a, 0xe2c56a][level];
+    this.fireStones[0].material.color.setHex(c);
   }
 
   fireRadius() {
     const f = this.fire.fuel;
     if (f <= 0) return 0;
-    return rules.fireMinRadius + f * rules.fireRadiusPerFuel;
+    // levels mostly mean "burns longer"; the light itself only grows a little per level
+    return rules.fireMinRadius + Math.min(f, 100) * rules.fireRadiusPerFuel + this.fire.level * 0.8;
   }
 
   updateFire(dt, time, darkness) {
     const r = this.fireRadius();
     const alive = this.fire.fuel > 0;
-    const k = alive ? 0.55 + this.fire.fuel / 140 : 0;
+    const k = alive ? 0.55 + Math.min(this.fire.fuel, 100) / 160 + this.fire.level * 0.08 : 0;
     this.flames.visible = alive;
     const flick = 1 + Math.sin(time * 17) * 0.06 + Math.sin(time * 9.3) * 0.05;
     this.flames.scale.set(k, k * flick, k);
@@ -184,7 +202,54 @@ export class World {
       m.rotation.set(rand(), rand() * 3, rand());
       m.castShadow = true; m.receiveShadow = true;
       this.group.add(m);
-      this.colliders.push({ x, z, r: s * 0.85 });
+      const col = { x, z, r: s * 0.85 };
+      this.colliders.push(col);
+      this.rocks.push({ mesh: m, x, z, r: col.r, col, size: s, hp: rules.rockHp, alive: true, shake: 0, gone: -1, baseY: m.position.y });
+    }
+  }
+
+  /** Hit a rock. Returns stone gained (0 if not broken). */
+  mineRock(rock, dmg = 1) {
+    rock.hp -= dmg;
+    rock.shake = 1;
+    if (rock.hp > 0) return 0;
+    rock.alive = false;
+    rock.gone = 0;
+    this.colliders.splice(this.colliders.indexOf(rock.col), 1);
+    return rules.stonePerRock + (rock.size > 1.0 ? 1 : 0);
+  }
+
+  updateRocks(dt) {
+    for (const r of this.rocks) {
+      if (r.shake > 0) {
+        r.shake = Math.max(0, r.shake - dt * 6);
+        r.mesh.position.x = r.x + Math.sin(r.shake * 40) * 0.06 * r.shake;
+      }
+      if (r.gone >= 0 && r.gone < 1) {
+        r.gone += dt * 3;
+        const k = Math.max(0, 1 - r.gone);
+        r.mesh.scale.set(k, 0.7 * k, k);
+        if (r.gone >= 1) r.mesh.visible = false;
+      }
+    }
+  }
+
+  /** Each morning some felled trees and broken rocks come back (never on top of the player). */
+  regrow(share, px, pz) {
+    const clear = (x, z, r) => Math.hypot(x - px, z - pz) > r + 1.2;
+    for (const t of this.trees) {
+      if (t.alive || t.fall < 2 || Math.random() > share || !clear(t.x, t.z, t.r)) continue;
+      t.alive = true; t.hp = rules.treeHp; t.fall = -1; t.shake = 0;
+      t.group.visible = true; t.group.position.y = 0;
+      t.group.rotation.set(0, t.group.rotation.y, 0);
+      if (t.stump) { this.group.remove(t.stump); t.stump = null; }
+      this.colliders.push(t.col);
+    }
+    for (const r of this.rocks) {
+      if (r.alive || Math.random() > share || !clear(r.x, r.z, r.r)) continue;
+      r.alive = true; r.hp = rules.rockHp; r.gone = -1;
+      r.mesh.visible = true; r.mesh.scale.set(1, 0.7, 1);
+      this.colliders.push(r.col);
     }
   }
 
@@ -226,8 +291,8 @@ export class World {
   }
 
   /** Hit a tree. Returns wood gained (0 if not felled). */
-  chopTree(tree, fromX, fromZ) {
-    tree.hp -= 1;
+  chopTree(tree, fromX, fromZ, dmg = 1) {
+    tree.hp -= dmg;
     tree.shake = 1;
     if (tree.hp > 0) return 0;
     tree.alive = false;
@@ -257,6 +322,7 @@ export class World {
           stump.position.set(t.x, 0.11, t.z);
           stump.castShadow = true;
           this.group.add(stump);
+          t.stump = stump;
         }
       }
     }

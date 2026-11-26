@@ -18,6 +18,11 @@
           <span class="hp-label">체력</span>
           <div class="bar"><i id="hp-fill"></i></div>
         </div>
+        <div class="res-row">
+          <div class="res" data-kind="wood"><span class="res-icon wood"></span><b id="res-wood">0</b></div>
+          <div class="res" data-kind="stone"><span class="res-icon stone"></span><b id="res-stone">0</b></div>
+          <div class="res" data-kind="bead"><span class="res-icon bead"></span><b id="res-bead">0</b></div>
+        </div>
       </div>
       <div class="hud-center">
         <div class="clock" id="clock">
@@ -27,12 +32,13 @@
         </div>
       </div>
       <div class="hud-right">
-        <div class="res"><span class="res-icon wood"></span><b id="wood">0</b></div>
         <div class="res fire"><span class="res-icon flame"></span><div class="bar small"><i id="fire-fill"></i></div></div>
         <button id="pause-btn" class="icon-btn" aria-label="일시정지">Ⅱ</button>
       </div>
     </div>
 
+    <div id="danger"></div>
+    <div id="banner"><small id="banner-sub"></small><b id="banner-text"></b></div>
     <div id="toast" aria-live="polite"></div>
     <div id="popups"></div>
 
@@ -40,20 +46,28 @@
     <div id="touch" hidden>
       <div id="stick-zone"></div>
       <div id="stick" hidden><div id="stick-knob"></div></div>
+      <div id="item-bar"></div>
+      <button id="btn-craft" class="pill-btn" hidden>만들기</button>
       <div class="btns">
         <button id="btn-roll" class="round-btn small-btn">구르기</button>
         <button id="btn-action" class="round-btn big-btn"><span id="action-label">베기</span></button>
       </div>
     </div>
-    <div id="keys-hint" hidden>왼쪽 화면 끌기 또는 WASD 이동 · J 베기 · K 구르기 · P 일시정지</div>
+    <div id="keys-hint" hidden>WASD 이동 · J 행동 · K 구르기 · 1~4 아이템 · C 만들기 · P 멈춤</div>
+
+    <section id="craft" hidden>
+      <div class="craft-head"><b>만들기</b><span class="craft-sub">모닥불 옆에서만</span><button id="craft-close" class="icon-btn" aria-label="닫기">✕</button></div>
+      <div id="craft-list"></div>
+    </section>
 
     <!-- Screens -->
     <section id="title-screen" class="screen">
       <div class="panel">
         <small class="eyebrow">한국 설화 생존 모험</small>
         <h1>도깨비 밤</h1>
-        <p>해가 지면 도깨비가 몰려온다.<br />낮 동안 장작을 모아 모닥불을 지켜라.<br />도깨비는 불빛 안으로 들어오지 못한다.</p>
-        <button id="start-btn" class="primary">하룻밤 버티기</button>
+        <p>곰은 동굴에서 백 일을 버텨 사람이 되었다.<br />너는 도깨비 섬에서 <b>백 일 밤</b>을 버텨라.<br />낮에는 모으고 짓고, 밤에는 불빛을 지켜라.</p>
+        <button id="start-btn" class="primary">첫째 날 시작</button>
+        <p class="best" id="best"></p>
       </div>
     </section>
 
