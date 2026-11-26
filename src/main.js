@@ -62,7 +62,8 @@ function startGame() {
 
 function showControls(on) {
   const touch = Input.isTouchDevice();
-  $('touch').hidden = !(on && touch);
+  // on-screen stick + buttons work with mouse too, so show them everywhere
+  $('touch').hidden = !on;
   $('keys-hint').hidden = !(on && !touch);
 }
 
