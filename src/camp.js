@@ -191,12 +191,27 @@ export class Camp {
       }
       const ax = Math.cos(facing), az = -Math.sin(facing); // local x axis after rotation
       for (const o of [-0.4, 0.4]) cols.push({ x: x + ax * o, z: z + az * o, r: 0.42 });
-      this.fences.push({ x, z, group: g, cols });
+      this.fences.push({ x, z, f: facing, group: g, cols });
     }
     this.world.colliders.push(...cols);
     this.group.add(g);
     this.grow = this.grow || [];
     this.grow.push({ g, t: 0 });
+  }
+
+  serialize() {
+    const xy = (o) => ({ x: +o.x.toFixed(2), z: +o.z.toFixed(2) });
+    return {
+      lanterns: this.lanterns.map(xy),
+      wells: this.wells.map(xy),
+      fences: this.fences.map((f) => ({ ...xy(f), f: +f.f.toFixed(3) })),
+    };
+  }
+
+  restore(data) {
+    for (const l of data.lanterns || []) this.build('lantern', l.x, l.z, 0);
+    for (const w of data.wells || []) this.build('well', w.x, w.z, 0);
+    for (const f of data.fences || []) this.build('fence', f.x, f.z, f.f);
   }
 
   nearWell(x, z, d = 1.8) { return this.wells.some((w) => Math.hypot(w.x - x, w.z - z) < d); }

@@ -67,7 +67,31 @@ function showBest() {
 }
 showBest();
 
-function startGame() {
+// ---------- save: written every dawn, removed when you fall ----------
+const SAVE_KEY = 'dokkaebi.save';
+function readSave() {
+  try { const d = JSON.parse(store.get(SAVE_KEY) || 'null'); return d && d.v === 1 ? d : null; } catch { return null; }
+}
+function saveGame() {
+  store.set(SAVE_KEY, JSON.stringify({
+    v: 1, day, inv: player.inv, ironAxe: player.ironAxe, hp: Math.round(player.hp),
+    water: Math.round(player.water), food: Math.round(player.food),
+    fireLv: world.fire.level, fuel: Math.round(world.fire.fuel), stats: player.stats, camp: camp.serialize(),
+  }));
+  showContinue();
+}
+function showContinue() {
+  const d = readSave();
+  const b = $('continue-btn');
+  b.hidden = !d;
+  if (d) b.textContent = `이어하기 · ${d.day}일째 아침`;
+  $('start-btn').textContent = d ? '처음부터' : '첫째 날 시작';
+  $('start-btn').className = d ? 'ghost' : 'primary';
+}
+showContinue();
+
+function startGame(save = null) {
+  if (save instanceof Event) save = null;
   unlock();
   player.reset();
   monsters.reset();
@@ -91,6 +115,18 @@ function startGame() {
   showControls(true);
   camera.snap(player.pos);
   spawnDayChests(true);
+  if (save) {
+    day = save.day;
+    Object.assign(player.inv, save.inv);
+    player.setAxe(!!save.ironAxe);
+    player.hp = save.hp; player.water = save.water; player.food = save.food;
+    Object.assign(player.stats, save.stats);
+    world.setFireLevel(save.fireLv);
+    world.fire.fuel = save.fuel;
+    camp.restore(save.camp);
+    hud.banner(`${day}일째 아침`, '이어서 버텨라', 2.6);
+    return;
+  }
   hud.banner('1일째 아침', '백 일 밤을 버텨라', 2.6);
   setTimeout(() => { if (state === 'playing' && day === 1) hud.toast('나무를 베고 바위를 캐고, 궤짝을 찾아보자', 3.2); }, 2400);
 }
@@ -118,6 +154,8 @@ function setPaused(p) {
 function endGame(won) {
   state = 'over';
   sfx(won ? 'dawn' : 'lose');
+  try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ }
+  showContinue();
   showControls(false);
   hud.show(false);
   const survived = won ? rules.totalNights : day - 1;
@@ -151,12 +189,14 @@ function newDay() {
   world.refillBushes();
   critters.repopulate(world, player.pos.x, player.pos.z);
   sfx('dawn');
+  saveGame();
   hud.banner(`${survived}일째 밤을 버텼다!`, `꼬끼오! ${day}일째 아침`, 3);
   effects.spawn(player.pos.x, 1.2, player.pos.z, 0xffe27a, { n: 18, speed: 3, up: 5, life: 1, size: 0.14, grav: 3 });
 }
 
-$('start-btn').onclick = startGame;
-$('again-btn').onclick = startGame;
+$('start-btn').onclick = () => startGame();
+$('continue-btn').onclick = () => startGame(readSave());
+$('again-btn').onclick = () => startGame();
 $('pause-btn').onclick = () => setPaused(true);
 const muteBtn = $('mute-btn');
 const showMute = () => muteBtn.classList.toggle('off', isMuted());
@@ -167,6 +207,7 @@ $('quit-btn').onclick = () => {
   state = 'title';
   $('pause-screen').hidden = true;
   $('title-screen').hidden = false;
+  showContinue();
   hud.show(false);
   showControls(false);
 };
