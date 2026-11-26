@@ -9,11 +9,15 @@ const palette = {
   night: { sky: C(0x0b1230), hemiSky: C(0x34407a), hemiGround: C(0x0c1020), hemi: 0.32, sun: C(0x9fb4ff), sunI: 0.32, water: C(0x14234a) },
 };
 
+const DREAD_SKY = C(0x2a0a24);
+const DREAD_HEMI = C(0x6a2a52);
+
 export class DayNight {
   constructor(scene, renderer) {
     this.scene = scene;
     this.renderer = renderer;
     this.time = 0;
+    this.dread = 0;          // 0..1, set per night by the game
     this.hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
     scene.add(this.hemi);
     this.sun = new THREE.DirectionalLight(0xffffff, 2);
@@ -80,6 +84,12 @@ export class DayNight {
     c.hemiGround.copy(a.hemiGround).lerp(b.hemiGround, k);
     c.sun.copy(a.sun).lerp(b.sun, k);
     c.water.copy(a.water).lerp(b.water, k);
+    // harder nights: the sky and fog bleed toward a sick red-violet
+    if (this.dread > 0 && d > 0.5) {
+      const kd = this.dread * (d - 0.5) * 2;
+      c.sky.lerp(DREAD_SKY, kd * 0.6);
+      c.hemiSky.lerp(DREAD_HEMI, kd * 0.5);
+    }
     this.hemi.color.copy(c.hemiSky);
     this.hemi.groundColor.copy(c.hemiGround);
     this.hemi.intensity = a.hemi + (b.hemi - a.hemi) * k;

@@ -138,6 +138,26 @@ const SFX = {
   dawn: () => { [0, 2, 4, 7, 9, 12].forEach((s, i) => tone({ type: 'triangle', f: 392 * Math.pow(2, s / 12), t: i * 0.1, dur: 0.6, vol: 0.13 })); },
   fireOut: () => noise({ type: 'lowpass', f: 2000, f2: 200, a: 0.05, dur: 0.8, vol: 0.35 }),
   deny: () => tone({ type: 'square', f: 180, f2: 140, dur: 0.1, vol: 0.08 }),
+  // dokkaebi cackle: a few "heh" syllables, a vowel formant over a buzzy voice
+  laugh: (t0 = 0, pitch = 1) => {
+    const n = 5 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < n; i++) {
+      const t = t0 + i * 0.13, f = (260 - i * 18) * pitch;
+      tone({ type: 'sawtooth', f, f2: f * 0.8, t, a: 0.01, dur: 0.09, vol: 0.05 });
+      noise({ type: 'bandpass', f: 1100 * pitch, q: 4, t, a: 0.01, dur: 0.08, vol: 0.12 });
+    }
+  },
+  // breathy whisper from somewhere in the dark
+  whisper: () => {
+    for (let i = 0; i < 3; i++) noise({ type: 'bandpass', f: r(1800, 3200), q: 6, t: i * r(0.15, 0.3), a: 0.08, dur: r(0.2, 0.4), vol: 0.07 });
+  },
+  // low dissonant swell for the night-start card
+  dread: () => {
+    tone({ type: 'sawtooth', f: 55, f2: 52, a: 0.4, dur: 2.6, vol: 0.12 });
+    tone({ type: 'sawtooth', f: 58.3, f2: 55, a: 0.4, dur: 2.6, vol: 0.1 });
+    tone({ type: 'sine', f: 880, f2: 840, t: 0.3, a: 0.8, dur: 1.8, vol: 0.03 });
+    noise({ type: 'lowpass', f: 200, f2: 900, a: 0.6, dur: 2, vol: 0.25 });
+  },
   lose: () => { [0, -3, -7, -12].forEach((s, i) => tone({ type: 'triangle', f: 330 * Math.pow(2, s / 12), t: i * 0.22, dur: 0.5, vol: 0.15 })); },
 };
 

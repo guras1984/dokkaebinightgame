@@ -122,6 +122,23 @@ export class Hud {
     this.bannerTimer = secs;
   }
 
+  /** spooky night-start card: black flash, flickering red title, an ominous line */
+  nightIntro(title, sub, boss = false) {
+    const el = $('night-intro');
+    this.el.banner.classList.remove('show'); this.bannerTimer = 0;
+    this.el.toast.classList.remove('show'); this.toastTimer = 0;
+    $('ni-title').textContent = title;
+    $('ni-sub').textContent = sub;
+    el.className = boss ? 'boss' : '';
+    el.hidden = true;
+    void el.offsetWidth;
+    el.hidden = false;
+    clearTimeout(this.niTimer);
+    this.niTimer = setTimeout(() => { el.hidden = true; }, 3700);
+  }
+
+  setNightGloom(v) { $('night-vignette').style.opacity = v.toFixed(3); }
+
   // ---------- crafting panel ----------
   setCraft(open) {
     this.craftOpen = open;

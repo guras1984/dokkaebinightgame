@@ -9,6 +9,7 @@ import { QuarterCamera } from './camera.js';
 import { Effects } from './effects.js';
 import { Camp } from './camp.js';
 import { Critters } from './critters.js';
+import { Eyes } from './spooky.js';
 import { sfx, unlock, ambience, isMuted, setMuted, audioState } from './sound.js';
 import { Hud, buildTunePanel } from './hud.js';
 import { RECIPES, USE_ORDER, ITEMS, canAfford, pay, rollLoot } from './items.js';
@@ -32,6 +33,7 @@ const effects = new Effects(scene, 160);
 const camp = new Camp(scene, world);
 const player = new Player(scene);
 const critters = new Critters(scene);
+const eyes = new Eyes(scene);
 const monsters = new Monsters(scene, effects);
 const daynight = new DayNight(scene, renderer);
 const hud = new Hud(input);
@@ -106,6 +108,7 @@ function startGame(save = null) {
   daynight.time = parseFloat(params.get('t') || '0');   // ?t=150 → start near dusk
   announced = {};
   hitStop = 0;
+  eyes.clear();
   state = 'playing';
   input.clear();
   $('title-screen').hidden = true;
@@ -178,6 +181,7 @@ function endGame(won) {
 function newDay() {
   const survived = day;
   monsters.banishAll();
+  eyes.clear();
   camp.clearChests('night');
   if (survived >= rules.totalNights) { endGame(true); return; }
   day += 1;
@@ -215,6 +219,19 @@ if (params.get('nopause') !== '1') {
   document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'playing') setPaused(true); });
 }
 if (params.get('tune') === '1') buildTunePanel();
+
+// how scary a night is: gentle at first, full horror from night 3, max on chief nights
+const dreadFor = (n) => (n % rules.bossEvery === 0 ? 1 : n < 3 ? 0.12 * n : Math.min(0.95, 0.45 + (n - 3) * 0.07));
+const OMENS = [
+  '어둠 속에서 누군가 웃고 있다…',
+  '불을 꺼뜨리지 마라',
+  '도깨비들이 배가 고프다',
+  '오늘 밤은 길 것이다',
+  '등 뒤를 조심해라',
+  '숲이 너무 조용하다…',
+  '저 눈들은 다 무엇이냐',
+  '방망이 소리가 가까워진다',
+];
 
 // ---------- gameplay helpers ----------
 const fireDist = () => Math.hypot(player.pos.x - world.fire.x, player.pos.z - world.fire.z);
@@ -612,6 +629,9 @@ function tick(dt) {
   }
   effects.update(dt);
   critters.update(dt, player, world, darkness > 0.5);
+  daynight.dread = dreadFor(day);
+  if (eyes.update(dt, { darkness, dread: daynight.dread, look: player.pos, zones: c.zones, camera: camera.cam }) === 'eyes' && Math.random() < 0.5) sfx(Math.random() < 0.5 ? 'whisper' : 'laugh', 0, 0.8 + Math.random() * 0.5);
+  hud.setNightGloom(darkness * (0.35 + daynight.dread * 0.55));
   world.updateBushes(dt);
   if (blastT >= 0) {
     blastT += dt;
@@ -624,13 +644,28 @@ function tick(dt) {
   // story beats
   if (phase === 'day' && daynight.remaining() < 30) beat('late', '곧 해가 진다. 모닥불에 장작을 넣자', 3);
   const bossNight = day % rules.bossEvery === 0;
+  if (phase === 'night' && !announced.nightIntro) {
+    announced.nightIntro = true;
+    const dr = dreadFor(day);
+    const fr = world.fireRadius();
+    eyes.ring(world.fire.x, world.fire.z, fr + 0.8, fr + 3.2, Math.round(5 + dr * 10), dr > 0.5);
+    if (day >= 3 || bossNight) {
+      // the scary card: black flash, flickering red title, an omen, a cackle in the dark
+      const omen = bossNight ? '대장이 깨어났다. 오늘 밤은 다르다' : OMENS[(day * 7) % OMENS.length];
+      hud.nightIntro(bossNight ? '대장의 밤' : '밤이 왔다', `${day}일째 밤 · ${omen}`, bossNight);
+      sfx('dread'); sfx('laugh', 0.9, 0.85); sfx('laugh', 1.6, 1.15);
+      camera.shake = Math.max(camera.shake, 0.5);
+    } else {
+      sfx('laugh', 0.4, 1.1);
+    }
+  }
   if (phase === 'dusk' && !announced.dusk) {
     announced.dusk = true; sfx('gong');
     if (bossNight) hud.banner(`${day}일째 밤 · 대장의 밤`, '오늘 밤 도깨비 대장이 온다', 3, 'raid');
     else hud.banner(`${day}일째 밤이 온다`, day === 1 ? '도깨비는 불빛 안으로 못 들어온다' : '어제보다 더 많이 온다', 2.6);
   }
   if (phase === 'night') {
-    if (day >= 2) beat('wispTip', day === 2 ? '도깨비불은 번쩍이면 돌진한다. 구르기로 피하자' : '도깨비가 몰려온다!', 3);
+    if (day >= 2 && nightP > 0.07) beat('wispTip', day === 2 ? '도깨비불은 번쩍이면 돌진한다. 구르기로 피하자' : '도깨비가 몰려온다!', 3);
     if (nightP > rules.nightChestAt && !announced.nightChest) {
       announced.nightChest = true;
       if (camp.spawnChest('night', 15, 26)) hud.toast('멀리서 도깨비 보물 궤짝이 빛난다!', 3);
@@ -691,7 +726,7 @@ requestAnimationFrame(frame);
 
 // debug handle for automated checks
 window.__game = {
-  get state() { return state; }, get day() { return day; }, critters, player, world, monsters, daynight, camera, input, tune, rules, camp, hud,
+  get state() { return state; }, get day() { return day; }, critters, eyes, player, world, monsters, daynight, camera, input, tune, rules, camp, hud,
   start: startGame, setTime: (t) => { daynight.time = t; },
   /** advance the game n frames without waiting for the browser (used by automated checks) */
   step: (n = 1, dt = 1 / 60) => { for (let i = 0; i < n; i++) tick(dt); return window.__game.info(); },
