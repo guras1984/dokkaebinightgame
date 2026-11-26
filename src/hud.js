@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { tune, tuneRanges } from './config.js';
 import { ITEMS, USE_ORDER, RECIPES, canAfford } from './items.js';
+import { sfx } from './sound.js';
 
 const $ = (id) => document.getElementById(id);
 const COST_ICON = { wood: 'wood', stone: 'stone', bead: 'bead' };
@@ -207,6 +208,7 @@ export class Hud {
         const el = this.resEl[kind];
         if (el && !el.hidden) this.bump(el);
         if (to) this.ring(to);
+        if (kind === 'bead') sfx('bead'); else sfx('pickup', i);
       };
       anim.oncancel = land;
     }

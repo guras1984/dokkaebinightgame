@@ -82,6 +82,7 @@ html, body {
 .res-icon.bead { border-radius: 50%; background: radial-gradient(circle at 35% 35%, #ffffff 0 12%, #8fd8ff 22%, #3b7bff 70%, #1d3a99); box-shadow: 0 0 6px #6fb8ff; }
 .res-icon.flame { background: radial-gradient(circle at 50% 70%, #ffe27a 0 30%, #ff8a1a 60%, transparent 62%); }
 
+.icon-btn.off { opacity: .45; text-decoration: line-through; }
 .icon-btn {
   pointer-events: auto; width: 36px; height: 36px; border-radius: 50%;
   border: 1px solid var(--panel-line); background: var(--panel); color: var(--ink);

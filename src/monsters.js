@@ -117,7 +117,7 @@ class Dokkaebi {
           goal = new THREE.Vector3(safe.x + Math.sin(a + jitter) * rr, 0, safe.z + Math.cos(a + jitter) * rr);
         } else {
           goal = player.pos;
-          if (dist < T.reach && !player.dead) { this.state = 'windup'; this.t = 0; }
+          if (dist < T.reach && !player.dead) { this.state = 'windup'; this.t = 0; event = 'windup'; }
         }
       } else if (this.state === 'windup') {
         windup = this.t / T.windup;
@@ -243,7 +243,7 @@ class Wisp {
         const gx = cx + Math.sin(this.orbitA) * orbitR, gz = cz + Math.cos(this.orbitA) * orbitR;
         this.vel.lerp(new THREE.Vector3(gx - this.pos.x, 0, gz - this.pos.z).multiplyScalar(2.2), Math.min(1, dt * 3));
         this.root.scale.setScalar(pulse);
-        if (!safe && this.t > this.next && !player.dead) { this.state = 'aim'; this.t = 0; }
+        if (!safe && this.t > this.next && !player.dead) { this.state = 'aim'; this.t = 0; event = 'wispCharge'; }
       } else if (this.state === 'aim') {
         // tell: shiver and flash white before the dash
         this.vel.multiplyScalar(Math.pow(0.01, dt));
@@ -253,6 +253,7 @@ class Wisp {
           this.state = 'dash'; this.t = 0;
           this.dash.set(player.pos.x - this.pos.x, 0, player.pos.z - this.pos.z).normalize().multiplyScalar(this.T.speed * 2.3 * this.speedMul);
           this.shell.material.color.setHex(0x4fa8ff);
+          event = 'wispDash';
         }
       } else if (this.state === 'dash') {
         this.vel.copy(this.dash);

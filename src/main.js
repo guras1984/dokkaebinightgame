@@ -9,6 +9,7 @@ import { QuarterCamera } from './camera.js';
 import { Effects } from './effects.js';
 import { Camp } from './camp.js';
 import { Critters } from './critters.js';
+import { sfx, unlock, ambience, isMuted, setMuted, audioState } from './sound.js';
 import { Hud, buildTunePanel } from './hud.js';
 import { RECIPES, USE_ORDER, ITEMS, canAfford, pay, rollLoot } from './items.js';
 
@@ -67,6 +68,7 @@ function showBest() {
 showBest();
 
 function startGame() {
+  unlock();
   player.reset();
   monsters.reset();
   camp.reset();
@@ -115,6 +117,7 @@ function setPaused(p) {
 
 function endGame(won) {
   state = 'over';
+  sfx(won ? 'dawn' : 'lose');
   showControls(false);
   hud.show(false);
   const survived = won ? rules.totalNights : day - 1;
@@ -147,6 +150,7 @@ function newDay() {
   spawnDayChests(false);
   world.refillBushes();
   critters.repopulate(world, player.pos.x, player.pos.z);
+  sfx('dawn');
   hud.banner(`${survived}일째 밤을 버텼다!`, `꼬끼오! ${day}일째 아침`, 3);
   effects.spawn(player.pos.x, 1.2, player.pos.z, 0xffe27a, { n: 18, speed: 3, up: 5, life: 1, size: 0.14, grav: 3 });
 }
@@ -154,6 +158,10 @@ function newDay() {
 $('start-btn').onclick = startGame;
 $('again-btn').onclick = startGame;
 $('pause-btn').onclick = () => setPaused(true);
+const muteBtn = $('mute-btn');
+const showMute = () => muteBtn.classList.toggle('off', isMuted());
+showMute();
+muteBtn.onclick = () => { unlock(); setMuted(!isMuted()); showMute(); };
 $('resume-btn').onclick = () => setPaused(false);
 $('quit-btn').onclick = () => {
   state = 'title';
@@ -219,6 +227,7 @@ function gain(kind, n, pos, delay = 0) {
 
 function openChest(c) {
   camp.open(c);
+  sfx('chest');
   player.stats.chests += 1;
   player.attackT = -1;
   player.facing = Math.atan2(c.x - player.pos.x, c.z - player.pos.z);
@@ -236,6 +245,7 @@ function tryAction() {
   if (c) { openChest(c); return; }
   if (canDrink()) {
     player.water = Math.min(100, player.water + rules.drinkAmount);
+    sfx('drink');
     tmp.set(Math.sin(player.facing), 0, Math.cos(player.facing));
     effects.spawn(player.pos.x + tmp.x * 0.8, 0.3, player.pos.z + tmp.z * 0.8, 0x7fd3ff, { n: 12, speed: 2, up: 3, life: 0.6, size: 0.1 });
     hud.popup('꿀꺽꿀꺽', { x: player.pos.x, y: 2.4, z: player.pos.z }, camera.cam, 'water big');
@@ -245,6 +255,7 @@ function tryAction() {
   const b = bushNear();
   if (b) {
     const n = world.pickBush(b);
+    sfx('eat');
     effects.spawn(b.x, 0.6, b.z, 0xe8344e, { n: 8, speed: 2, up: 3, life: 0.5, size: 0.09 });
     gain('berry', n, { x: b.x, y: 0.7, z: b.z });
     hud.popup(`+${n} 산딸기`, { x: b.x, y: 1.8, z: b.z }, camera.cam, 'wood big');
@@ -252,7 +263,8 @@ function tryAction() {
   }
   if (nearFire() && player.wood > 0) {
     const max = world.fire.max;
-    if (world.fire.fuel >= max - 1) { hud.toast('불이 충분히 크다', 1.2); return; }
+    if (world.fire.fuel >= max - 1) { hud.toast('불이 충분히 크다', 1.2); sfx('deny'); return; }
+    sfx('feed');
     player.wood -= 1;
     player.stats.fed += 1;
     const was = world.fire.fuel;
@@ -271,7 +283,7 @@ function tryAction() {
     const a = Math.atan2(target.x - player.pos.x, target.z - player.pos.z);
     if (Math.abs(Math.atan2(Math.sin(a - player.facing), Math.cos(a - player.facing))) < 1.0) aim = a;
   }
-  player.startAttack(aim);
+  if (player.startAttack(aim)) sfx('swing');
 }
 
 function resolveStrike() {
@@ -285,6 +297,7 @@ function resolveStrike() {
     if ((dx * fx + dz * fz) / (d || 1) < 0.2) continue;
     hitSomething = true;
     const killed = m.hit(dmg, player.pos.x, player.pos.z);
+    sfx(killed ? 'kill' : 'hitMonster');
     effects.spawn(m.pos.x, 1.1, m.pos.z, 0xfff2a8, { n: 8, speed: 4.5, up: 3, life: 0.35, size: 0.11 });
     camera.shake = Math.max(camera.shake, 0.6);
     hitStop = Math.max(hitStop, killed ? rules.killStop : rules.hitStop);
@@ -300,6 +313,7 @@ function resolveStrike() {
     if (d > reach + r.radius + 0.2) continue;
     if ((dx * fx + dz * fz) / (d || 1) < 0.1) continue;
     if (r.hit()) {
+      sfx('hitMonster');
       effects.spawn(r.pos.x, 0.5, r.pos.z, 0xf2ede4, { n: 10, speed: 3, up: 3, life: 0.5, size: 0.1 });
       hitStop = Math.max(hitStop, rules.hitStop);
       hud.popup('+1 날고기', { x: r.pos.x, y: 1.8, z: r.pos.z }, camera.cam, 'wood big');
@@ -313,6 +327,7 @@ function resolveStrike() {
     if (d > reach + t.r) continue;
     if ((dx * fx + dz * fz) / (d || 1) < 0.3) continue;
     const got = world.chopTree(t, player.pos.x, player.pos.z, dmg);
+    sfx(got ? 'treeFall' : 'chop');
     effects.spawn(t.x - fx * 0.3, 0.8, t.z - fz * 0.3, 0xd9a066, { n: 7, speed: 3, up: 3, life: 0.5, size: 0.11 });
     camera.shake = Math.max(camera.shake, 0.25);
     if (got) {
@@ -332,6 +347,7 @@ function resolveStrike() {
     if (d > reach + r.r) continue;
     if ((dx * fx + dz * fz) / (d || 1) < 0.3) continue;
     const got = world.mineRock(r, dmg);
+    sfx(got ? 'rockBreak' : 'rock');
     effects.spawn(r.x - fx * 0.4, 0.6, r.z - fz * 0.4, 0xffffff, { n: 5, speed: 4, up: 3, life: 0.25, size: 0.07 });
     effects.spawn(r.x - fx * 0.4, 0.6, r.z - fz * 0.4, 0xa7a9b2, { n: 6, speed: 3, up: 3, life: 0.5, size: 0.12 });
     camera.shake = Math.max(camera.shake, 0.3);
@@ -352,6 +368,7 @@ function craft(id) {
   const r = RECIPES.find((x) => x.id === id);
   if (!r || !r.show(craftState()) || !canAfford(player.inv, r.cost)) return;
   pay(player.inv, r.cost);
+  sfx('craft');
   for (const k of Object.keys(r.cost)) hud.spend(k, { x: world.fire.x, y: 1, z: world.fire.z }, camera.cam);
   const at = { x: world.fire.x, y: 1.2, z: world.fire.z };
   if (id === 'fire2' || id === 'fire3') {
@@ -378,7 +395,8 @@ function useItem(id) {
   if (!player.inv[id] || player.dead) return;
   const fx = Math.sin(player.facing), fz = Math.cos(player.facing);
   if (id === 'berry' || id === 'meat' || (id === 'rawmeat' && !nearFire())) {
-    if (player.food >= 99) { hud.toast('배부르다', 1.2); return; }
+    if (player.food >= 99) { hud.toast('배부르다', 1.2); sfx('deny'); return; }
+    sfx('eat');
     const amt = id === 'berry' ? rules.berryFood : id === 'meat' ? rules.meatFood : rules.rawMeatFood;
     player.inv[id] -= 1;
     player.food = Math.min(100, player.food + amt);
@@ -389,17 +407,20 @@ function useItem(id) {
   } else if (id === 'rawmeat') {
     // cook by the fire
     player.inv.rawmeat -= 1;
+    sfx('cook');
     effects.spawn(world.fire.x, 1.2, world.fire.z, 0xffd08a, { n: 14, speed: 1.5, up: 4, life: 0.8, size: 0.12, grav: -1 });
     hud.popup('지글지글', { x: world.fire.x, y: 2.4, z: world.fire.z }, camera.cam, 'fire big');
     gain('meat', 1, { x: world.fire.x, y: 1, z: world.fire.z }, 300);
   } else if (id === 'herb') {
-    if (player.hp >= rules.playerHp - 0.5) { hud.toast('체력이 가득하다', 1.2); return; }
+    if (player.hp >= rules.playerHp - 0.5) { hud.toast('체력이 가득하다', 1.2); sfx('deny'); return; }
+    sfx('heal');
     player.inv.herb -= 1;
     player.hp = Math.min(rules.playerHp, player.hp + rules.herbHeal);
     effects.spawn(player.pos.x, 1.2, player.pos.z, 0x7be07a, { n: 16, speed: 1.5, up: 4, life: 0.9, size: 0.13, grav: -1 });
     hud.popup(`+${rules.herbHeal}`, { x: player.pos.x, y: 2.5, z: player.pos.z }, camera.cam, 'heal big');
   } else if (id === 'charm') {
     player.inv.charm -= 1;
+    sfx('charm');
     const n = monsters.banishNear(player.pos.x, player.pos.z, rules.charmRadius);
     blastT = 0; blast.position.x = player.pos.x; blast.position.z = player.pos.z;
     effects.spawn(player.pos.x, 1, player.pos.z, 0xffd65a, { n: 30, speed: 7, up: 3, life: 0.7, size: 0.14, grav: 2 });
@@ -409,7 +430,8 @@ function useItem(id) {
   } else if (id === 'lantern' || id === 'fence' || id === 'well') {
     const x = player.pos.x + fx * 1.5, z = player.pos.z + fz * 1.5;
     const why = camp.checkSpot(id, x, z);
-    if (why) { hud.toast(why, 1.4); return; }
+    if (why) { hud.toast(why, 1.4); sfx('deny'); return; }
+    sfx('build');
     player.inv[id] -= 1;
     camp.build(id, x, z, player.facing);
     player.stats.built += 1;
@@ -472,7 +494,7 @@ function tick(dt) {
     else if (p.startsWith('slot')) { input.pressed.delete(p); useItem(USE_ORDER[parseInt(p.slice(4), 10) - 1]); }
   }
 
-  if (input.consume('roll')) player.startRoll(wish.clone());
+  if (input.consume('roll') && player.startRoll(wish.clone())) sfx('roll');
   const autoOk = !player.attacking && !player.rolling && !nearFire() && !chestNear() && !bushNear();
   if (input.consume('action') || (input.actionHeld && autoOk)) tryAction();
 
@@ -487,7 +509,7 @@ function tick(dt) {
   const burn = phase === 'night' ? rules.burnNight : phase === 'dusk' ? (rules.burnDay + rules.burnNight) / 2 : rules.burnDay;
   if (world.fire.fuel > 0) {
     world.fire.fuel = Math.max(0, world.fire.fuel - burn * gdt);
-    if (world.fire.fuel === 0) { hud.toast('모닥불이 꺼졌다! 장작을 넣어!', 3); camera.shake = 0.5; }
+    if (world.fire.fuel === 0) { hud.toast('모닥불이 꺼졌다! 장작을 넣어!', 3); camera.shake = 0.5; sfx('fireOut'); }
   }
   world.updateFire(dt, nowS, darkness);
   world.updateTrees(dt);
@@ -514,7 +536,13 @@ function tick(dt) {
   const nightP = phase === 'night' ? daynight.progress() : -1;
   const events = monsters.update(dt, c, nightP, day);
   for (const e of events) {
+    const near = Math.hypot(e.m.pos.x - player.pos.x, e.m.pos.z - player.pos.z) < 14;
+    if (e.type === 'windup' && near) sfx('windup');
+    else if (e.type === 'wispCharge' && near) sfx('wispCharge');
+    else if (e.type === 'wispDash' && near) sfx('wispDash');
+    if (e.type === 'stomp' && near) sfx('stomp');
     if (e.type === 'hitPlayer' && player.hurt(e.m.damage, e.m.pos.x, e.m.pos.z)) {
+      sfx('hurt');
       camera.shake = 1;
       hitStop = 0.07;
       hud.popup(`-${e.m.damage}`, { x: player.pos.x, y: 2.4, z: player.pos.z }, camera.cam, 'hurt big');
@@ -536,7 +564,7 @@ function tick(dt) {
 
   // story beats
   if (phase === 'day' && daynight.remaining() < 30) beat('late', '곧 해가 진다. 모닥불에 장작을 넣자', 3);
-  if (phase === 'dusk' && !announced.dusk) { announced.dusk = true; hud.banner(`${day}일째 밤이 온다`, day === 1 ? '도깨비는 불빛 안으로 못 들어온다' : '어제보다 더 많이 온다', 2.6); }
+  if (phase === 'dusk' && !announced.dusk) { announced.dusk = true; sfx('gong'); hud.banner(`${day}일째 밤이 온다`, day === 1 ? '도깨비는 불빛 안으로 못 들어온다' : '어제보다 더 많이 온다', 2.6); }
   if (phase === 'night') {
     if (day >= 2) beat('wispTip', day === 2 ? '도깨비불은 번쩍이면 돌진한다. 구르기로 피하자' : '도깨비가 몰려온다!', 3);
     if (nightP > rules.nightChestAt && !announced.nightChest) {
@@ -546,6 +574,7 @@ function tick(dt) {
     if (day >= 2 && nightP > rules.raidAt && !announced.raid) {
       announced.raid = true;
       monsters.raid(c, day);
+      sfx('raid');
       hud.banner('도깨비 습격!', '둥둥둥… 북소리가 들린다', 2.8, 'raid');
       camera.shake = 1;
     }
@@ -567,6 +596,7 @@ function tick(dt) {
   }
   const lowHp = player.hp < 35 ? 0.35 + (1 - player.hp / 35) * 0.6 : 0;
 
+  ambience.update(dt, { darkness, fireNear: Math.max(0, 1 - fireDist() / 9), lowHp, playing: true, time: nowS });
   const chest = chestNear();
   hud.update({
     dt, time: nowS, hp: player.hp, hpMax: rules.playerHp, inv: player.inv, fuel: world.fire.fuel, fuelMax: world.fire.max,
@@ -595,6 +625,7 @@ window.__game = {
   step: (n = 1, dt = 1 / 60) => { for (let i = 0; i < n; i++) tick(dt); return window.__game.info(); },
   key: (k, down, code) => dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', { key: k, code })),
   give: (k, n) => { player.inv[k] += n; },
+  audio: () => audioState(), sfx,
   press: (name) => input.pressed.add(name),
   info: () => ({
     state, day, phase: daynight.phase(), water: +player.water.toFixed(1), food: +player.food.toFixed(1), rabbits: critters.alive.length, time: +daynight.time.toFixed(1), hp: +player.hp.toFixed(1), inv: { ...player.inv },
