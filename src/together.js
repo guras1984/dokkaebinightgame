@@ -3,8 +3,16 @@ import { buildCharacter, animateCharacter } from './character.js';
 import { EMOTES } from './net.js';
 
 // Friends in the same room: blocky characters that glide to their latest position, name tags, emote bubbles.
-const TOP = { basic: 0xf6f1e4, redcoat: 0xb0303a, mask: 0xf6f1e4, gat: 0xf6f1e4, dragon: 0xd9b04a };
-const COLORS = [0x6fd3ff, 0xffb07a, 0xb59cff, 0x8fe08a, 0xff8fb1, 0xffe27a];
+// together: everyone in a room gets their own colour (the server hands out a free slot), shown on the jeogori and the name
+export const TEAM = [
+  { shirt: 0x3d8bff, tag: '#7cc0ff', name: '파랑' },
+  { shirt: 0xff7a2e, tag: '#ffb07a', name: '주황' },
+  { shirt: 0x8f5bff, tag: '#c3a6ff', name: '보라' },
+  { shirt: 0x3fbf5f, tag: '#8fe08a', name: '초록' },
+  { shirt: 0xff4f8b, tag: '#ff9fc0', name: '분홍' },
+  { shirt: 0xf2c230, tag: '#ffe27a', name: '노랑' },
+];
+export const team = (c) => TEAM[(c | 0) % TEAM.length];
 
 export class Friends {
   constructor(scene, layer) {
@@ -19,13 +27,14 @@ export class Friends {
 
   add(p) {
     if (this.map.has(p.id)) { this.update(p); return; }
-    const color = COLORS[this.map.size % COLORS.length];
-    const rig = buildCharacter({ kind: 'hero', skin: 0xffd9b0, top: TOP[p.look] || 0xf6f1e4, pants: 0x34406e, hair: 0x2a1f1a });
+    const tm = team(p.c ?? this.map.size + 1);
+    const color = tm.tag;
+    const rig = buildCharacter({ kind: 'hero', skin: 0xffd9b0, top: tm.shirt, pants: 0x34406e, hair: 0x2a1f1a });
     rig.root.position.set(p.x || 0, 0, p.z || 0);
     this.scene.add(rig.root);
     const tag = document.createElement('div');
     tag.className = 'name-tag';
-    tag.style.setProperty('--c', '#' + color.toString(16).padStart(6, '0'));
+    tag.style.setProperty('--c', color);
     tag.innerHTML = `<b>${p.name}</b><span class="hpbar"><i></i></span>`;
     this.layer.appendChild(tag);
     this.map.set(p.id, { id: p.id, name: p.name, color, rig, tag, pos: rig.root.position, to: new THREE.Vector3(p.x || 0, 0, p.z || 0), f: p.f || 0, s: 0, a: 0, hp: p.hp ?? 100, time: Math.random() * 5, bubble: null });
@@ -39,7 +48,6 @@ export class Friends {
     if ((p.a & 1) && !(fr.a & 1)) fr.attackT = 0;   // swing started
     if ((p.a & 2) && !(fr.a & 2)) fr.rollT = 0;     // roll started
     fr.a = p.a;
-    if (p.look && p.look !== fr.look) { fr.look = p.look; fr.rig.torso.material.color.setHex(TOP[p.look] || 0xf6f1e4); }
   }
 
   remove(id) {
@@ -51,7 +59,19 @@ export class Friends {
     this.map.delete(id);
   }
 
-  clear() { for (const id of [...this.map.keys()]) this.remove(id); }
+  clear() { for (const id of [...this.map.keys()]) this.remove(id); this.setSelf(null); }
+
+  /** a small name tag over my own head in my colour (null removes it) */
+  setSelf(root, name, c) {
+    if (this.self) { this.self.tag.remove(); this.self = null; }
+    if (!root) return;
+    const tag = document.createElement('div');
+    tag.className = 'name-tag me';
+    tag.style.setProperty('--c', team(c).tag);
+    tag.innerHTML = `<b>${name} (나)</b>`;
+    this.layer.appendChild(tag);
+    this.self = { root, tag };
+  }
 
   emote(id, k) {
     const fr = this.map.get(id);
@@ -67,6 +87,11 @@ export class Friends {
   }
 
   frame(dt, camera) {
+    if (this.self) {
+      const p = this.self.root.position;
+      this.v.set(p.x, 2.35, p.z).project(camera);
+      this.self.tag.style.transform = `translate(${(this.v.x * 0.5 + 0.5) * innerWidth}px, ${(-this.v.y * 0.5 + 0.5) * innerHeight}px) translate(-50%, -100%)`;
+    }
     for (const fr of this.map.values()) {
       fr.time += dt;
       const before = fr.pos.clone();

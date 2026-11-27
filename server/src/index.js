@@ -63,8 +63,8 @@ export class Lobby {
     const url = new URL(req.url);
     const rooms = (await this.state.storage.get('rooms')) || {};
     const now = Date.now();
-    // drop rooms nobody has touched for 2 hours
-    for (const [c, r] of Object.entries(rooms)) if (now - r.t > 2 * 3600e3) delete rooms[c];
+    // drop rooms that stopped checking in
+    for (const [c, r] of Object.entries(rooms)) if (now - r.t > 3 * 60e3) delete rooms[c];   // a running room checks in every minute; silence = gone
     if (url.pathname === '/list') {
       const list = Object.entries(rooms).map(([code, r]) => ({ code, name: r.name, n: r.n, max: MAX_PLAYERS, locked: r.locked }))
         .filter((r) => r.n > 0).sort((a, b) => b.n - a.n).slice(0, 30);
@@ -114,14 +114,17 @@ export class Room {
   }
 
   tick() {
-    const socks = this.state.getWebSockets();
+    this.n = (this.n || 0) + 1;
+    if (this.n % 20 === 0) this.dropSilent();   // every 2 s
+    if (this.n % 600 === 0) this.report();       // every minute: "still alive" to the room list
+    const socks = this.state.getWebSockets().filter((ws) => ws.deserializeAttachment());
     if (!socks.length) {
       clearInterval(this.loop); this.loop = null;
       if (this.sim) this.state.storage.put('world', this.sim.save());
       this.sim = null;
       return;
     }
-    const players = socks.map((ws) => ws.deserializeAttachment()).filter(Boolean);
+    const players = socks.map((ws) => ws.deserializeAttachment());
     try { this.sim.step(0.1, players); } catch (err) { console.log('sim error', err && err.stack); }
     const { all, direct } = this.sim.drain();
     if (all.length) this.broadcast({ t: 'b', l: all });
@@ -130,6 +133,39 @@ export class Room {
       if (ws) { try { ws.send(JSON.stringify(d.msg)); } catch { /* gone */ } }
     }
     if (Date.now() - this.saveT > 30000) { this.saveT = Date.now(); this.state.storage.put('world', this.sim.save()); }
+  }
+
+  /** a phone that closed the app or lost signal never says goodbye: if we hear nothing (moves or the 25 s ping) for 45 s, it has left */
+  dropSilent() {
+    const now = Date.now();
+    for (const ws of this.state.getWebSockets()) {
+      const a = ws.deserializeAttachment();
+      if (!a) continue;
+      const ping = this.state.getWebSocketAutoResponseTimestamp(ws);
+      const last = Math.max(a.seen || 0, ping ? ping.getTime() : 0);
+      if (now - last > 45000) { this.leave(ws, a); continue; }
+      // standing still for 7 minutes (asleep, phone left on the table): leave the room, so an empty room can close
+      if (now - (a.moved || a.seen || now) > (+this.env.IDLE_MS || 7 * 60000)) {
+        try { ws.send(JSON.stringify({ t: 'kicked', why: 'idle' })); } catch { /* gone */ }
+        this.leave(ws, a);
+      }
+    }
+  }
+
+  leave(ws, me) {
+    ws.serializeAttachment(null);   // no longer counted, even if the socket lingers
+    try { ws.close(4000, 'gone'); } catch { /* already closed */ }
+    if (me) this.broadcast({ t: 'leave', id: me.id }, ws);
+    this.report(ws);
+  }
+
+  /** a room nobody has been in for a minute is gone (so together always starts fresh) */
+  async alarm() {
+    if (this.players().length) return;
+    const m = await this.load();
+    if (m) await this.env.LOBBY.get(this.env.LOBBY.idFromName('lobby')).fetch('https://x/remove', { method: 'POST', body: JSON.stringify({ code: m.code }) });
+    clearInterval(this.loop); this.loop = null; this.sim = null; this.meta = null;
+    await this.state.storage.deleteAll();
   }
 
   players(except) {
@@ -145,7 +181,9 @@ export class Room {
     const m = await this.load();
     if (!m) return;
     const lobby = this.env.LOBBY.get(this.env.LOBBY.idFromName('lobby'));
-    await lobby.fetch('https://x/upsert', { method: 'POST', body: JSON.stringify({ code: m.code, name: m.name, locked: !!m.pwHash, n: this.players(except).length }) });
+    const n = this.players(except).length;
+    await lobby.fetch('https://x/upsert', { method: 'POST', body: JSON.stringify({ code: m.code, name: m.name, locked: !!m.pwHash, n }) });
+    if (!n) await this.state.storage.setAlarm(Date.now() + (+this.env.EMPTY_MS || 60000));
   }
 
   async fetch(req) {
@@ -169,10 +207,13 @@ export class Room {
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     this.state.acceptWebSocket(server);
-    const me = { id: pid, name: NICK_OK.test(nick) ? nick : '도깨비 사냥꾼', look: url.searchParams.get('look') || 'basic', x: 0, z: 2.4, f: 0, s: 0, hp: 100 };
+    // a colour slot nobody in the room is using, so friends look different
+    const used = new Set(this.players().map((q) => q.c));
+    let c = 0; while (used.has(c)) c++;
+    const me = { c, id: pid, name: NICK_OK.test(nick) ? nick : '도깨비 사냥꾼', look: url.searchParams.get('look') || 'basic', x: 0, z: 2.4, f: 0, s: 0, hp: 100, seen: Date.now(), moved: Date.now() };
     server.serializeAttachment(me);
     const sim = await this.ensureSim();
-    server.send(JSON.stringify({ t: 'welcome', you: me.id, room: { code: m.code, name: m.name, locked: !!m.pwHash }, seed: m.seed, startDay: m.startDay, start: m.start, now: Date.now(), players: this.players().filter((p) => p.id !== me.id) }));
+    server.send(JSON.stringify({ t: 'welcome', you: me.id, c: me.c, room: { code: m.code, name: m.name, locked: !!m.pwHash }, seed: m.seed, startDay: m.startDay, start: m.start, now: Date.now(), players: this.players().filter((p) => p.id !== me.id) }));
     if (sim) server.send(JSON.stringify(sim.welcome()));
     this.broadcast({ t: 'join', p: me }, server);
     await this.report();
@@ -184,9 +225,12 @@ export class Room {
     try { msg = JSON.parse(raw); } catch { return; }
     const me = ws.deserializeAttachment();
     if (!me) return;
+    if (!this.loop) await this.ensureSim();   // woke up from sleep: keep the world (and the idle/silence checks) running
     if (msg.t === 'p') {
       // movement: keep the last state (for late joiners) and pass it on
-      Object.assign(me, { x: +msg.x || 0, z: +msg.z || 0, f: +msg.f || 0, s: +msg.s || 0, a: msg.a | 0, hp: msg.hp | 0, w: String(msg.w || '').slice(0, 8), look: String(msg.look || me.look).slice(0, 12) });
+      const nx = +msg.x || 0, nz = +msg.z || 0;
+      if (Math.hypot(nx - me.x, nz - me.z) > 0.05 || (msg.a & 1)) me.moved = Date.now();
+      Object.assign(me, { x: +msg.x || 0, z: +msg.z || 0, f: +msg.f || 0, s: +msg.s || 0, a: msg.a | 0, hp: msg.hp | 0, w: String(msg.w || '').slice(0, 8), look: String(msg.look || me.look).slice(0, 12), seen: Date.now() });
       ws.serializeAttachment(me);
       this.broadcast({ t: 'p', id: me.id, x: me.x, z: me.z, f: me.f, s: me.s, a: me.a, hp: me.hp, w: me.w, look: me.look }, ws);
     } else if (msg.t === 'emote' && EMOTES.includes(msg.k)) {
@@ -206,9 +250,7 @@ export class Room {
 
   async webSocketClose(ws) {
     const me = ws.deserializeAttachment();
-    try { ws.close(1000, 'bye'); } catch { /* already closed */ }
-    if (me) this.broadcast({ t: 'leave', id: me.id }, ws);
-    await this.report(ws);
+    this.leave(ws, me);
   }
 
   async webSocketError(ws) { await this.webSocketClose(ws); }

@@ -18,7 +18,7 @@ import { Meta, MONSTER_INFO, ACHIEVEMENTS, GIFTS, OUTFITS, UPGRADES, upgradeCost
 import { Dog } from './pet.js';
 import { setupInstall } from './install.js';
 import { Net, listRooms, createRoom, myNick, setNick, randomNick, EMOTES, SERVER as SERVER_URL, roomName } from './net.js';
-import { Friends } from './together.js';
+import { Friends, team } from './together.js';
 import { Fox } from './beasts.js';
 import { difficulty } from './config.js';
 import { PROLOGUE, campLine } from './story.js';
@@ -147,7 +147,8 @@ function readSave() {
   try { const d = JSON.parse(store.get(SAVE_KEY) || 'null'); return d && d.v >= 1 ? d : null; } catch { return null; }
 }
 function saveGame() {
-  store.set(mp ? 'dokkaebi.mp.' + mp.code : SAVE_KEY, JSON.stringify({
+  if (mp) return;   // together always starts fresh from day 1; only solo play is saved
+  store.set(SAVE_KEY, JSON.stringify({
     v: 1, day, mode, t: +daynight.time.toFixed(1), pos: [+player.pos.x.toFixed(2), +player.pos.z.toFixed(2)], seed: world.seed, explored: minimap.serialize(), inv: player.inv, ironAxe: player.ironAxe, axeLevel: player.axeLevel, armor: player.armor, hp: Math.round(player.hp),
     villagers: village.inCamp.map((p) => p.def.id), level: player.level, xp: player.xp, perks: player.perks || [], pearls: player.pearls || 0, dog: dog.tamed, weapons: player.weapons, weapon: player.weapon, sandals: !!player.sandals, rod: !!player.rod,
     water: Math.round(player.water), food: Math.round(player.food),
@@ -175,10 +176,9 @@ const friends = new Friends(scene, $('tags'));
 const CYCLE = () => rules.dayLength + rules.duskLength + rules.nightLength;
 /** the room's shared clock → day and time of day */
 function mpClock() {
-  const el = Math.max(0, (mp.net.now() - mp.start) / 1000);
+  const el = Math.max(0, (mp.net.now() - mp.start) / 1000) * rules.mpSpeed;
   return { day: mp.startDay + Math.floor(el / CYCLE()), time: el % CYCLE() };
 }
-function readMpSave(code) { try { const d = JSON.parse(store.get('dokkaebi.mp.' + code) || 'null'); return d && d.v >= 1 ? d : null; } catch { return null; } }
 
 // ---- the room's shared world (monsters, fire, buildings) comes from the server ----
 const bySid = new Map();
@@ -203,6 +203,7 @@ function serverStruct(sm) {
   return st;
 }
 function onServer(msg) {
+  if (msg.t === 'kicked') { leaveRoom(true); hud.toast('오래 움직이지 않아서 방에서 나왔어요', 3.5); return; }
   if (!mp) return;
   if (state !== 'playing' && state !== 'paused' && state !== 'talk' && state !== 'levelup' && state !== 'summary') { (mp.pending = mp.pending || []).push(msg); return; }
   const near = (x, z, r = 14) => Math.hypot(x - player.pos.x, z - player.pos.z) < r;
@@ -319,7 +320,7 @@ function downFriend() {
 }
 
 function bindNet(net) {
-  for (const t of ['b', 'world', 'hurt', 'revived', 'deny']) net.on(t, onServer);
+  for (const t of ['b', 'world', 'hurt', 'revived', 'deny', 'kicked']) net.on(t, onServer);
   net.on('join', (m) => { friends.add(m.p); hud.toast(`${m.p.name} 님이 들어왔다 👋`, 2.2); sfx('chest'); })
     .on('p', (m) => friends.update(m))
     .on('leave', (m) => { const f = friends.map.get(m.id); if (f) hud.toast(`${f.name} 님이 나갔다`, 1.8); friends.remove(m.id); })
@@ -335,10 +336,16 @@ async function joinRoom(code, pw) {
   friends.clear();
   for (const p of w.players) friends.add(p);
   $('mp-screen').hidden = true;
+  mp.c = w.c | 0;
   bySid.clear();
   monsters.puppet = true;
-  startGame(readMpSave(code));
+  startGame(null);
   $('btn-emote').hidden = false;
+  // each colour starts on its own side of the campfire (not all on one spot)
+  { const a = mp.c * (Math.PI * 2 / 6) + 0.5; player.pos.set(world.fire.x + Math.sin(a) * 3, 0, world.fire.z + Math.cos(a) * 3); world.resolve(player.pos, 0.42); camera.snap(player.pos); }
+  // my colour in this room (jeogori + name tag), so friends can tell us apart
+  player.rig.torso.material.color.setHex(team(mp.c).shirt);
+  friends.setSelf(player.rig.root, myNick(), mp.c);
   const pend = mp.pending || []; mp.pending = [];
   for (const m of pend) onServer(m);
   hud.banner(`👫 ${w.room.name || '같이 하기'}`, `방 번호 ${code}${w.room.locked ? ' · 🔒' : ''} · ${friends.count + 1}명`, 3);
@@ -355,6 +362,7 @@ async function reconnect(attempt) {
     bySid.clear(); monsters.reset();
     friends.clear();
     for (const p of w.players) friends.add(p);
+    mp.c = w.c | 0; player.rig.torso.material.color.setHex(team(mp.c).shirt); friends.setSelf(player.rig.root, myNick(), mp.c);
     hud.toast('다시 연결됐다!', 1.6);
   } catch {
     setTimeout(() => reconnect(attempt + 1), 2000);
@@ -369,6 +377,7 @@ function leaveRoom(toTitle = false) {
   monsters.puppet = false;
   bySid.clear();
   friends.clear();
+  player.setOutfit(meta.outfits().includes(meta.outfit) ? meta.outfit : 'basic');
   $('btn-emote').hidden = true;
   $('emote-menu').hidden = true;
   if (toTitle) $('quit-btn').onclick();
@@ -746,6 +755,10 @@ function setPaused(p) {
     ri.hidden = !mp;
     if (mp) ri.innerHTML = `👫 <b>${mp.room.name || '같이 하기'}</b><br>방 번호 <b>${mp.code}</b>${mp.pw ? ` · 비밀번호 <b>${mp.pw}</b>` : ' · 비밀번호 없음'}<br>함께: ${[myNick(), ...friends.list.map((f) => f.name)].join(', ')}`;
   }
+  // together: the world never stops for friends, so this is only a menu — the game keeps running behind it
+  $('pause-screen').querySelector('h2').textContent = mp ? '👫 메뉴' : '잠시 멈춤';
+  $('resume-btn').textContent = mp ? '닫기' : '계속하기';
+  if (mp) { $('pause-screen').hidden = !p; $('quit-btn').textContent = '🚪 방 나가기'; input.clear(); return; }
   if (p && state === 'playing') saveGame();
   state = p ? 'paused' : 'playing';
   $('pause-screen').hidden = !p;
@@ -887,6 +900,7 @@ $('continue-btn').onclick = () => startGame(readSave());
 $('again-btn').onclick = () => startGame();
 $('retry-btn').onclick = () => startGame(readSave());
 $('pause-btn').onclick = () => setPaused(true);
+const menuOpen = () => !$('pause-screen').hidden;
 const muteBtn = $('mute-btn');
 const showMute = () => { muteBtn.textContent = isMuted() ? '소리 켜기' : '소리 끄기'; };
 showMute();
@@ -896,6 +910,7 @@ $('pause-screen').addEventListener('pointerdown', (e) => { if (e.target.id === '
 $('summary').addEventListener('pointerdown', (e) => { if (e.target.id === 'summary') $('sum-btn').onclick(); });
 $('quit-btn').onclick = () => {
   if (mp) leaveRoom();
+  $('pause-screen').hidden = true;
   state = 'title';
   $('pause-screen').hidden = true;
   $('title-screen').hidden = false;
@@ -917,7 +932,7 @@ addEventListener('popstate', () => {
   if (!$('meta-screen').hidden) $('meta-screen').hidden = true;
 });
 if (params.get('nopause') !== '1') {
-  document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'playing') setPaused(true); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'playing' && !mp) setPaused(true); });
 }
 // leaving or hiding the app always saves (even in test mode)
 for (const ev of ['visibilitychange', 'pagehide']) {
@@ -1590,7 +1605,7 @@ function tick(dt) {
   const nowS = clock;
   input.update();
 
-  if (input.consume('pause')) setPaused(state === 'playing');
+  if (input.consume('pause')) setPaused(mp ? !menuOpen() : state === 'playing');
   if (state === 'levelup' || state === 'summary') {
     if (state === 'summary' && input.consume('action')) $('sum-btn').onclick();
     input.pressed.clear(); renderer.render(scene, camera.cam); return;
@@ -1673,7 +1688,7 @@ function tick(dt) {
   if (ev === 'strike') resolveStrike();
 
   const phase = daynight.phase();
-  const { darkness } = daynight.update(gdt, player.pos);
+  const { darkness } = daynight.update(mp ? gdt * rules.mpSpeed : gdt, player.pos);
   world.water.material.color.copy(daynight.col.water);
 
   // fire burns down

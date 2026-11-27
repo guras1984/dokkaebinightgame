@@ -37,6 +37,7 @@ export const rules = {
   dayLength: 80,
   duskLength: 10,
   nightLength: 95,
+  mpSpeed: 1.5,          // together: the day/night clock runs this much faster (shorter sessions with friends)
   islandRadius: 50,     // whole island; the home forest is the inner 24 m (see world.js INNER)
   playerHp: 100,
   playerRadius: 0.42,

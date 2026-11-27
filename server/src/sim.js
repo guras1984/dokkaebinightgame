@@ -42,7 +42,7 @@ export class Sim {
   }
 
   clock() {
-    const el = Math.max(0, (Date.now() - this.meta.start) / 1000);
+    const el = Math.max(0, (Date.now() - this.meta.start) / 1000) * rules.mpSpeed;
     return { day: this.meta.startDay + Math.floor(el / CYCLE), time: el % CYCLE };
   }
 
