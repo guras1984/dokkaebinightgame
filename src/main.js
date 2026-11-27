@@ -408,6 +408,15 @@ function mpTick(dt) {
 
 // rooms screen
 let mpTab = 'list';
+/** open room → straight in; locked room → ask the password only then */
+async function joinByCode(code, locked) {
+  mpMsg('…');
+  unlock();
+  if (!locked) { try { await joinRoom(code, ''); return; } catch { /* maybe locked */ } }
+  const pw = (prompt('비밀번호') || '').replace(/\D/g, '');
+  if (!pw) { mpMsg(''); return; }
+  try { await joinRoom(code, pw); } catch (err) { mpMsg(err.message); }
+}
 function mpMsg(t) { $('mp-msg').textContent = t || ''; }
 async function showRooms(tab = mpTab) {
   mpTab = tab;
@@ -426,7 +435,7 @@ async function showRooms(tab = mpTab) {
   const body = $('mp-body');
   body.innerHTML = '';
   const tryJoin = async (code, pw) => {
-    mpMsg('들어가는 중…');
+    mpMsg('…');
     try { unlock(); await joinRoom(code, pw); } catch (err) { mpMsg(err.message); }
   };
   if (tab === 'list') {
@@ -434,7 +443,7 @@ async function showRooms(tab = mpTab) {
     let rooms = [];
     try { rooms = await listRooms(); } catch { body.innerHTML = '<p class="mp-hint">서버에 연결할 수 없어요. 잠시 뒤 다시 해 주세요.</p>'; return; }
     if (mpTab !== 'list') return;
-    body.innerHTML = rooms.length ? '' : '<p class="mp-hint">지금 열린 방이 없어요. "방 만들기"로 먼저 만들어 보세요!</p>';
+    body.innerHTML = rooms.length ? '' : '<p class="mp-hint">열린 방이 없어요</p>';
     for (const r of rooms) {
       const row = document.createElement('div');
       row.className = 'room-row';
@@ -444,9 +453,7 @@ async function showRooms(tab = mpTab) {
       b.textContent = r.n >= r.max ? '가득' : '들어가기';
       b.disabled = r.n >= r.max;
       b.onclick = () => {
-        if (!r.locked) { tryJoin(r.code, ''); return; }
-        const pw = prompt('비밀번호 (숫자)를 넣어 주세요');
-        if (pw) tryJoin(r.code, pw);
+        joinByCode(r.code, r.locked);
       };
       row.appendChild(b);
       body.appendChild(row);
@@ -457,32 +464,25 @@ async function showRooms(tab = mpTab) {
     refresh.onclick = () => showRooms('list');
     body.appendChild(refresh);
   } else if (tab === 'create') {
-    const pw0 = String(1000 + Math.floor(Math.random() * 9000));
     body.innerHTML = `<div class="mp-form">
-      <label>🔒 비밀번호 방 <input type="checkbox" id="mp-lock" checked></label>
-      <label id="mp-pw-row">비밀번호 (숫자) <input type="tel" id="mp-pw" maxlength="6" value="${pw0}"></label>
-      <p class="mp-hint">🔒 비밀번호 방: 방 번호와 비밀번호를 친구에게 알려 줘야 들어올 수 있어요.<br>🌐 비밀번호 없는 방: 방 목록에 보여서 누구나 들어올 수 있어요.</p>
-      <button class="primary" id="mp-make">방 만들고 들어가기</button></div>`;
-    const lock = $('mp-lock');
-    lock.onchange = () => { $('mp-pw-row').style.display = lock.checked ? '' : 'none'; };
+      <label>방 이름 <input type="text" id="mp-name" maxlength="12" value="${myNick()}의 방"></label>
+      <label>비밀번호 <input type="tel" id="mp-pw" maxlength="6" placeholder="없음"></label>
+      <button class="primary" id="mp-make">방 만들기</button></div>`;
     $('mp-make').onclick = async () => {
-      const pw = lock.checked ? $('mp-pw').value.replace(/\D/g, '') : '';
-      if (lock.checked && pw.length < 4) { mpMsg('비밀번호는 숫자 4자리 이상'); return; }
-      mpMsg('방을 만드는 중…');
-      try {
-        const code = await createRoom(`${myNick()}의 방`, pw);
-        await tryJoin(code, pw);
-      } catch (err) { mpMsg(err.message || '방을 만들지 못했어요'); }
+      const pw = $('mp-pw').value.replace(/\D/g, '');
+      if (pw && pw.length < 4) { mpMsg('비밀번호는 숫자 4자리 이상'); return; }
+      const name = $('mp-name').value.replace(/[^\p{L}\p{N} ]/gu, '').trim().slice(0, 12) || `${myNick()}의 방`;
+      mpMsg('만드는 중…');
+      try { await tryJoin(await createRoom(name, pw), pw); } catch (err) { mpMsg(err.message || '방을 만들지 못했어요'); }
     };
   } else {
     body.innerHTML = `<div class="mp-form">
       <label>방 번호 <input type="tel" id="mp-code" maxlength="4" placeholder="1234"></label>
-      <label>비밀번호 <input type="tel" id="mp-pw2" maxlength="6" placeholder="없으면 비움"></label>
       <button class="primary" id="mp-go">들어가기</button></div>`;
     $('mp-go').onclick = () => {
       const code = $('mp-code').value.replace(/\D/g, '');
-      if (code.length !== 4) { mpMsg('방 번호 4자리를 넣어 주세요'); return; }
-      tryJoin(code, $('mp-pw2').value.replace(/\D/g, ''));
+      if (code.length !== 4) { mpMsg('방 번호 4자리'); return; }
+      joinByCode(code);
     };
   }
 }
@@ -497,8 +497,10 @@ $('mp-reroll').onclick = () => { setNick(randomNick()); $('mp-nick').textContent
 {
   const rc = params.get('room'), tab = params.get('mp');
   if (/^\d{4}$/.test(rc || '') || ['list', 'create', 'code'].includes(tab)) {
-    const u = new URL(location.href); u.searchParams.delete('room'); u.searchParams.delete('mp'); history.replaceState(null, '', u);
-    if (rc && /^\d{4}$/.test(rc)) showRooms('code').then(() => { $('mp-code').value = rc; mpMsg('방 ' + rc + ' — 비밀번호 방이면 비밀번호를 넣고 "들어가기"'); });
+    const u = new URL(location.href); u.searchParams.delete('room'); u.searchParams.delete('mp'); u.searchParams.delete('lock'); history.replaceState(null, '', u);
+    if (rc && /^\d{4}$/.test(rc)) {
+      showRooms('code').then(() => { $('mp-code').value = rc; joinByCode(rc, params.get('lock') === '1'); });
+    }
     else showRooms(tab);
   }
 }
