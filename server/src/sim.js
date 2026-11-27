@@ -164,7 +164,7 @@ export class Sim {
     const events = this.monsters.update(dt, ctx, this.tonight === 'horde' ? -1 : nightP, this.day);
     for (const e of events) {
       const m = e.m;
-      if (e.type === 'hitPlayer') this.direct.push({ to: m.target, msg: { t: 'hurt', dmg: m.damage, x: +m.pos.x.toFixed(2), z: +m.pos.z.toFixed(2), sid: m.sid } });
+      if (e.type === 'hitPlayer') this.direct.push({ to: m.victim, msg: { t: 'hurt', dmg: m.damage, x: +m.pos.x.toFixed(2), z: +m.pos.z.toFixed(2), sid: m.sid } });
       else if (e.type === 'hitStruct' && m.hitTarget) {
         const st = m.hitTarget;
         if (!this.camp.structs.includes(st)) continue;

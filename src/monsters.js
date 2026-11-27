@@ -484,7 +484,7 @@ export class Monsters {
       if (d < bd) { bd = d; best = p; }
     }
     best = best || ctx.players[0];
-    m.target = best && best.id;
+    m.victim = best && best.id;   // not "target": beasts use that for their own aim point
     return Object.assign({}, ctx, { player: best });
   }
 
