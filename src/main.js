@@ -906,18 +906,15 @@ $('quit-btn').onclick = () => {
 };
 // on ttuk.pages.dev the game sits in /dokkaebi/: show the way back to the game list
 if (/\/dokkaebi\/?$/.test(location.pathname)) $('home-link').hidden = false;
-// phone back button: playing → pause menu, pause menu → back to the game; on the title it leaves as usual.
-// Browsers skip history entries made without a tap, so the guard entry is (re)made on a tap while in the game.
+// phone back button: back once → pause (saved); back again → leave like any app.
+// Browsers only honour history entries made right after a tap, so the guard entry is (re)made on taps while in the game.
 function backGuard() { if (state !== 'title' && !(history.state && history.state.g === 1)) history.pushState({ g: 1 }, ''); }
-document.addEventListener('pointerdown', backGuard, true);
+document.addEventListener('click', backGuard, true);
+document.addEventListener('touchend', backGuard, true);
 addEventListener('popstate', () => {
-  if (state === 'title') {
-    if (!$('mp-screen').hidden || !$('meta-screen').hidden) { $('mp-screen').hidden = true; $('meta-screen').hidden = true; }
-    return;
-  }
   if (state === 'playing') setPaused(true);
-  else if (state === 'paused') setPaused(false);
-  history.pushState({ g: 1 }, '');
+  if (!$('mp-screen').hidden) $('mp-screen').hidden = true;
+  if (!$('meta-screen').hidden) $('meta-screen').hidden = true;
 });
 if (params.get('nopause') !== '1') {
   document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'playing') setPaused(true); });

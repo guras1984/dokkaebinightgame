@@ -55,7 +55,7 @@ export function setupInstall() {
     if (r && r.outcome === 'accepted') $('install-btn').hidden = true;
     deferred = null;
   };
-  $('title-screen').addEventListener('pointerdown', autoAsk, { capture: true });
+  $('title-screen').addEventListener('click', autoAsk, { capture: true });   // click, not pointerdown: a touch only counts as a tap when the finger lifts
 
   // iPhone Safari can't open an install dialog: show the button + a picture guide instead
   if (isIOS) $('install-btn').hidden = false;
