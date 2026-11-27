@@ -493,6 +493,14 @@ fetch(SERVER_URL + '/', { cache: 'no-store' }).then((r) => r.json()).then((j) =>
 $('mp-close').onclick = () => { $('mp-screen').hidden = true; };
 $('mp-screen').addEventListener('pointerdown', (e) => { if (e.target.id === 'mp-screen') $('mp-screen').hidden = true; });
 $('mp-reroll').onclick = () => { setNick(randomNick()); $('mp-nick').textContent = myNick(); };
+// a room link from the ttuk portal (…/dokkaebi/?room=1234): open "번호로 들어가기" with the number filled in
+{
+  const rc = params.get('room');
+  if (/^\d{4}$/.test(rc || '')) {
+    const u = new URL(location.href); u.searchParams.delete('room'); history.replaceState(null, '', u);
+    showRooms('code').then(() => { $('mp-code').value = rc; mpMsg('방 ' + rc + ' — 비밀번호 방이면 비밀번호를 넣고 "들어가기"'); });
+  }
+}
 
 // ---------- title: bestiary / achievements / outfits / start gift ----------
 const MONSTER_PIC = { dokkaebi: '👹', wisp: '🔵', elite: '👺', centipede: '🐛', fox: '🦊', shadow: '👤', bulgasari: '🐻', boss: '👑', imugi: '🐍', dragon: '🐉' };
