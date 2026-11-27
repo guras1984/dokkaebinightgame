@@ -98,6 +98,12 @@
         <small class="eyebrow">한국 설화 생존 모험</small>
         <h1>도깨비 밤</h1>
         <p>곰은 동굴에서 백 일을 버텨 사람이 되었다.<br />너는 도깨비 섬에서 <b>백 일 밤</b>을 버텨라.<br />낮에는 모으고 짓고, 밤에는 불빛을 지켜라.</p>
+        <div id="inapp-bar" hidden>
+          <b>카카오톡 같은 앱 안에서 열렸어요</b>
+          <span id="inapp-desc">여기서는 설치가 안 돼요. 크롬이나 사파리로 열어 주세요</span>
+          <button id="inapp-btn" class="primary">🌐 크롬/사파리로 열기</button>
+        </div>
+        <button id="install-btn" class="install" hidden>📲 앱으로 설치하기 <small>홈 화면에 아이콘이 생겨요</small></button>
         <button id="continue-btn" class="primary" hidden>이어하기</button>
         <button id="start-btn" class="primary">첫째 날 시작</button>
         <div class="mode-pick">
@@ -114,6 +120,19 @@
         </div>
         <p class="best" id="best"></p>
       </div>
+    </section>
+
+    <section id="ios-guide" class="screen" hidden>
+      <div class="panel guide">
+        <h2>홈 화면에 앱 만들기</h2>
+        <ol>
+          <li><span class="step">1</span> 화면 <b>아래쪽 가운데</b>의 <span class="share">⬆︎</span> <b>공유 버튼</b>을 눌러요</li>
+          <li><span class="step">2</span> 목록을 조금 올려서 <b>"홈 화면에 추가"</b> ➕ 를 눌러요</li>
+          <li><span class="step">3</span> 오른쪽 위 <b>"추가"</b>를 누르면 끝! 이제 아이콘으로 켜요</li>
+        </ol>
+        <button id="ios-ok" class="primary">알겠어요</button>
+      </div>
+      <div class="guide-arrow">⬇︎</div>
     </section>
 
     <section id="meta-screen" class="screen" hidden>

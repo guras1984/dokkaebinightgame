@@ -16,6 +16,7 @@ import { NIGHTS, pickNight, Horde, Rain } from './events.js';
 import { XP, xpNeed, rollPerks, PERKS } from './perks.js';
 import { Meta, MONSTER_INFO, ACHIEVEMENTS, GIFTS, OUTFITS, UPGRADES, upgradeCost, runCoins } from './meta.js';
 import { Dog } from './pet.js';
+import { setupInstall } from './install.js';
 import { PROLOGUE, campLine } from './story.js';
 import { WEAPONS, WEAPON_ORDER, CRIT_CHANCE, CRIT_MUL, weaponDmg, weaponChop } from './weapons.js';
 import { sfx, unlock, ambience, music, isMuted, setMuted, audioState } from './sound.js';
@@ -162,6 +163,7 @@ function showContinue() {
   $('start-btn').className = d ? 'ghost' : 'primary';
 }
 showContinue();
+setupInstall();
 
 // ---------- title: bestiary / achievements / outfits / start gift ----------
 const MONSTER_PIC = { dokkaebi: '👹', wisp: '🔵', elite: '👺', centipede: '🐛', fox: '🦊', shadow: '👤', bulgasari: '🐻', boss: '👑', imugi: '🐍', dragon: '🐉' };
