@@ -11,6 +11,7 @@ import { Camp, STRUCT } from './camp.js';
 import { Critters } from './critters.js';
 import { Eyes } from './spooky.js';
 import { Village } from './villagers.js';
+import { Minimap } from './minimap.js';
 import { PROLOGUE, campLine } from './story.js';
 import { WEAPONS, WEAPON_ORDER, CRIT_CHANCE, CRIT_MUL, weaponDmg, weaponChop } from './weapons.js';
 import { sfx, unlock, ambience, music, isMuted, setMuted, audioState } from './sound.js';
@@ -39,6 +40,7 @@ const critters = new Critters(scene);
 const eyes = new Eyes(scene);
 const village = new Village(scene, world, effects);
 village.relayout();
+const minimap = new Minimap();
 // the torch: one light that follows the player (created up front so shaders don't recompile)
 const torchLight = new THREE.PointLight(0xffb050, 0, 9, 1.5);
 scene.add(torchLight);
@@ -104,7 +106,7 @@ function readSave() {
 }
 function saveGame() {
   store.set(SAVE_KEY, JSON.stringify({
-    v: 1, day, mode, seed: world.seed, inv: player.inv, ironAxe: player.ironAxe, axeLevel: player.axeLevel, armor: player.armor, hp: Math.round(player.hp),
+    v: 1, day, mode, seed: world.seed, explored: minimap.serialize(), inv: player.inv, ironAxe: player.ironAxe, axeLevel: player.axeLevel, armor: player.armor, hp: Math.round(player.hp),
     villagers: village.inCamp.map((p) => p.def.id), weapons: player.weapons, weapon: player.weapon, sandals: !!player.sandals, rod: !!player.rod,
     water: Math.round(player.water), food: Math.round(player.food),
     fireLv: world.fire.level, fuel: Math.round(world.fire.fuel), stats: player.stats, camp: camp.serialize(),
@@ -132,6 +134,8 @@ function startGame(save = null) {
   world.day = day;
   world.generate(save && save.seed ? save.seed : (Math.random() * 1e9) >>> 0);
   village.relayout();
+  minimap.reset();
+  if (save && save.explored) minimap.restore(save.explored);
   critters.reset();
   critters.repopulate(world, player.pos.x, player.pos.z);
   world.setFireLevel(0);
@@ -1084,7 +1088,9 @@ function tick(dt) {
   const fighting = (monsters.boss && monsters.boss.alive) || (phase === 'night' && announced.raid && monsters.alive.length >= 5) || village.lairs.some((l) => l.state === 'guarded' && Math.hypot(l.x - player.pos.x, l.z - player.pos.z) < 14);
   music.setMood(fighting ? 'battle' : darkness > 0.5 ? 'night' : 'day');
   music.update();
-  hud.setGoal(currentGoal(phase, inLight, c.fireR), player.pos, camera.cam);
+  const goal = currentGoal(phase, inLight, c.fireR);
+  hud.setGoal(goal, player.pos, camera.cam);
+  minimap.update(dt, { player, world, camp, village, monsters: monsters.alive, darkness, goal: goal && goal.target });
   const chest = chestNear();
   hud.update({
     dt, time: nowS, hp: player.hp, hpMax: rules.playerHp, inv: player.inv, fuel: world.fire.fuel, fuelMax: world.fire.max,
