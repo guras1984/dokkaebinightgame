@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { rules, difficulty, MONSTER_TYPES } from './config.js';
-import { buildCharacter, animateCharacter, flash } from './character.js';
+import { buildCharacter, animateCharacter, flash, setMonsterEyes } from './character.js';
 
 const angDiff = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
-const SKINS = [0x5b8cff, 0xe0524f, 0x6fcf7a];
+const SKINS = [0x3d5a9a, 0x8a2a2a, 0x3f6b3a]; // ash blue, dark red, moss green
 
 /** the safe circle containing p, if any */
 function zoneAt(zones, p, inset = 0.2) {
@@ -26,7 +26,7 @@ class Dokkaebi {
     this.type = type;
     this.T = T;
     const boss = type === 'boss';
-    const skin = boss ? 0xc23a2a : type === 'elite' ? 0x7a3fd0 : SKINS[variant % 3];
+    const skin = boss ? 0x7a1414 : type === 'elite' ? 0x4a2a6a : SKINS[variant % 3];
     this.rig = buildCharacter({ kind: 'dokkaebi', skin, top: boss ? 0x2a1f3d : skin, pants: type === 'elite' ? 0xe0524f : boss ? 0xf1c24b : 0xf2b632, hair: boss ? 0xf1c24b : 0x1d1b2e });
     this.rig.root.scale.setScalar(0.01);
     scene.add(this.rig.root);
@@ -35,7 +35,7 @@ class Dokkaebi {
     this.pos.set(x, 0, z);
     this.vel = new THREE.Vector3();
     this.knock = new THREE.Vector3();
-    this.hp = boss ? Math.round(10 + diff.n * 1.2) : Math.round(T.hp * diff.hp);
+    this.hp = boss ? Math.round(T.hp + diff.n * 14) : Math.round(T.hp * diff.hpMul);
     this.slamT = 0;
     this.summonT = 8;
     this.maxHp = this.hp;
@@ -55,15 +55,16 @@ class Dokkaebi {
 
   get alive() { return this.state !== 'dying' && this.state !== 'gone'; }
 
-  hit(dmg, fromX, fromZ) {
+  hit(dmg, fromX, fromZ, kbMul = 1) {
     if (!this.alive) return false;
     this.hp -= dmg;
+    this.hurtShow = 3;
     flash(this.rig, 1);
     const dx = this.pos.x - fromX, dz = this.pos.z - fromZ, d = Math.hypot(dx, dz) || 1;
-    const kb = this.type === 'boss' ? 0.8 : this.type === 'elite' ? 4 : 9;
+    const kb = (this.type === 'boss' ? 0.8 : this.type === 'elite' ? 4 : 9) * kbMul;
     this.knock.set((dx / d) * kb, 0, (dz / d) * kb);
     // big ones shrug off the interrupt unless the hit is strong
-    if (this.state === 'windup' && this.type !== 'boss' && (this.type !== 'elite' || dmg > 1)) { this.state = 'recover'; this.t = 0; }
+    if (this.state === 'windup' && this.type !== 'boss' && (this.type !== 'elite' || dmg >= 25)) { this.state = 'recover'; this.t = 0; }
     if (this.hp <= 0) { this.state = 'dying'; this.t = 0; return true; }
     return false;
   }
@@ -77,7 +78,7 @@ class Dokkaebi {
     this.state = 'dying'; this.t = 0;
   }
 
-  dispose() { this.scene.remove(this.rig.root); this.scene.remove(this.warn); }
+  dispose() { this.scene.remove(this.rig.root); this.scene.remove(this.warn); if (this.bar) this.scene.remove(this.bar); }
 
   update(dt, ctx) {
     this.time += dt;
@@ -112,6 +113,18 @@ class Dokkaebi {
       let goal = null;
 
       const leashed = this.home && Math.hypot(player.pos.x - this.home.x, player.pos.z - this.home.z) > this.home.r;
+      this.breakCD = Math.max(0, (this.breakCD || 0) - dt);
+      if (this.state === 'chase' && !leashed && dist > T.reach && this.breakCD <= 0 && ctx.structs) {
+        // a building in the way (or the one it is waiting next to) gets smashed
+        for (const st of ctx.structs) {
+          const reachS = (st.zoneR ? st.zoneR + 0.6 : st.colR + 0.9) + this.radius;
+          if (Math.hypot(st.x - this.pos.x, st.z - this.pos.z) < reachS) {
+            this.state = 'windup'; this.t = 0; this.targetStruct = st; event = 'windup';
+            this.facing = Math.atan2(st.x - this.pos.x, st.z - this.pos.z);
+            break;
+          }
+        }
+      }
       if (this.state === 'chase') {
         if (leashed) {
           // lair guards don't chase you across the island
@@ -130,7 +143,9 @@ class Dokkaebi {
         }
       } else if (this.state === 'windup') {
         windup = this.t / T.windup;
-        this.facing += angDiff(this.facing, Math.atan2(dx, dz)) * Math.min(1, dt * (this.type === 'elite' ? 3 : 6));
+        const ts = this.targetStruct;
+        const aimA = ts ? Math.atan2(ts.x - this.pos.x, ts.z - this.pos.z) : Math.atan2(dx, dz);
+        this.facing += angDiff(this.facing, aimA) * Math.min(1, dt * (this.type === 'elite' ? 3 : 6));
         const fx = Math.sin(this.facing), fz = Math.cos(this.facing);
         const wr = T.hitReach * 0.55;
         this.warn.position.x = this.pos.x + fx * wr;
@@ -141,6 +156,8 @@ class Dokkaebi {
           this.state = 'recover'; this.t = 0;
           const ahead = (dx * fx + dz * fz) / (dist || 1);
           if (dist < T.hitReach && (ahead > 0.3 || this.type === 'boss')) event = 'hitPlayer';
+          else if (this.targetStruct) { event = 'hitStruct'; this.hitTarget = this.targetStruct; this.breakCD = 0.6; }
+          this.targetStruct = null;
           if (this.type === 'boss') { event = event || (this.slamming ? 'fireSlam' : 'stomp'); this.slamming = false; }
           effects.spawn(this.pos.x + fx * 1.1 * T.scale, 0.1, this.pos.z + fz * 1.1 * T.scale, 0xd9c7a0, { n: this.type === 'elite' ? 14 : 6, speed: 2.5, up: 2, life: 0.4, size: 0.12 });
           if (this.type === 'elite') event = event || 'stomp';
@@ -160,7 +177,9 @@ class Dokkaebi {
 
       if (goal) {
         const gx = goal.x - this.pos.x, gz = goal.z - this.pos.z, gd = Math.hypot(gx, gz);
-        const sp = T.speed * this.speedMul * (gd < 0.4 ? 0 : 1);
+        this.slowT = Math.max(0, (this.slowT || 0) - dt);
+        const inSlow = ctx.slowZones && ctx.slowZones.some((z) => Math.hypot(this.pos.x - z.x, this.pos.z - z.z) < z.r);
+        const sp = T.speed * this.speedMul * (gd < 0.4 ? 0 : 1) * (inSlow || this.slowT > 0 ? 0.55 : 1);
         this.vel.lerp(new THREE.Vector3((gx / (gd || 1)) * sp, 0, (gz / (gd || 1)) * sp), Math.min(1, dt * 6));
         if (gd > 0.3) this.facing += angDiff(this.facing, Math.atan2(gx, gz)) * Math.min(1, dt * 8);
         else this.facing += angDiff(this.facing, Math.atan2(dx, dz)) * Math.min(1, dt * 4);
@@ -179,6 +198,7 @@ class Dokkaebi {
     }
 
     this.rig.root.rotation.y = this.facing;
+    setMonsterEyes(this.rig, ctx.darkness ?? 0, this.state === 'windup' ? windup : 0);
     animateCharacter(this.rig, {
       dist: Math.hypot(this.pos.x - before.x, this.pos.z - before.z) / T.scale,
       speedRatio, attack: -1, roll: -1, windup, time: this.time,
@@ -209,8 +229,8 @@ class Wisp {
     this.pos.set(x, 1.1, z);
     this.vel = new THREE.Vector3();
     this.knock = new THREE.Vector3();
-    this.hp = 1;
-    this.maxHp = 1;
+    this.hp = Math.round(this.T.hp * diff.hpMul);
+    this.maxHp = this.hp;
     this.damage = this.T.damage;
     this.radius = this.T.radius;
     this.speedMul = diff.speedMul;
@@ -225,15 +245,18 @@ class Wisp {
 
   get alive() { return this.state !== 'dying' && this.state !== 'gone'; }
 
-  hit() {
+  hit(dmg = 999) {
     if (!this.alive) return false;
+    this.hp -= dmg;
+    this.hurtShow = 3;
+    if (this.hp > 0) { this.state = 'orbit'; this.t = 0; this.next = 1.2; return false; }
     this.state = 'dying'; this.t = 0;
     return true;
   }
 
   banish() { if (this.alive) { this.state = 'dying'; this.t = 0; } }
 
-  dispose() { this.scene.remove(this.root); }
+  dispose() { this.scene.remove(this.root); if (this.bar) this.scene.remove(this.bar); }
 
   update(dt, ctx) {
     this.time += dt;
@@ -345,8 +368,38 @@ export class Monsters {
         b.x += (dx / d) * push; b.z += (dz / d) * push;
       }
     }
+    for (const m of this.list) m.trapCD = Math.max(0, (m.trapCD || 0) - dt);
     this.list = this.list.filter((m) => m.state !== 'gone');
+    this.updateBars(dt, ctx.camera);
     return events;
+  }
+
+  /** small health bar over a monster for a few seconds after it gets hit (the chief uses the HUD bar) */
+  updateBars(dt, camera) {
+    for (const m of this.list) {
+      const show = m.alive && m.type !== 'boss' && (m.hurtShow || 0) > 0;
+      m.hurtShow = Math.max(0, (m.hurtShow || 0) - dt);
+      if (!show) { if (m.bar) m.bar.visible = false; continue; }
+      if (!m.bar) {
+        const g = new THREE.Group();
+        const bg = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.13), new THREE.MeshBasicMaterial({ color: 0x1a0a0a, transparent: true, opacity: 0.8, depthTest: false }));
+        const fill = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.09), new THREE.MeshBasicMaterial({ color: 0xff4a3a, depthTest: false }));
+        fill.position.z = 0.001;
+        bg.renderOrder = 10; fill.renderOrder = 11;
+        g.add(bg, fill);
+        g.fill = fill;
+        this.scene.add(g);
+        m.bar = g;
+      }
+      const k = Math.max(0, m.hp / m.maxHp);
+      m.bar.visible = true;
+      m.bar.fill.scale.x = Math.max(0.001, k);
+      m.bar.fill.position.x = -(1 - k) / 2;
+      const h = m.type === 'wisp' ? 1.9 : 2.5 * (m.T.scale || 1);
+      m.bar.position.set(m.pos.x, h, m.pos.z);
+      if (camera) m.bar.quaternion.copy(camera.quaternion);
+      m.bar.scale.setScalar(m.type === 'elite' ? 1.3 : 0.9);
+    }
   }
 
   /** place a monster in the dark, away from the player (or around angle `dir` for a raid) */
@@ -423,7 +476,7 @@ export class Monsters {
     let n = 0;
     for (const m of this.list) {
       if (!m.alive || Math.hypot(m.pos.x - x, m.pos.z - z) >= r) continue;
-      if (m.type === 'boss') { m.hit(3, x, z); m.knock.multiplyScalar(6); continue; } // the chief only staggers
+      if (m.type === 'boss') { m.hit(30, x, z); m.knock.multiplyScalar(6); continue; } // the chief only staggers
       m.banish(x, z); n++;
     }
     return n;

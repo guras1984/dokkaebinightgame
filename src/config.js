@@ -48,7 +48,7 @@ export const rules = {
   fireMax: 100,
   fuelPerWood: 12,
   burnDay: 0.21,        // fuel per second (≈ same fuel per day as before, days are shorter)
-  burnNight: 1.05,
+  burnNight: 1.2,
   fireMinRadius: 2.6,
   fireRadiusPerFuel: 0.058,
   monsterHp: 3,
@@ -98,21 +98,21 @@ export const rules = {
 export function difficulty(n) {
   const k = n - 1;
   return {
-    capStart: Math.min(10, rules.capStart + k * 0.8),
-    capEnd: Math.min(18, rules.capEnd + k * 1.2),
+    capStart: Math.min(11, rules.capStart + 1 + k * 0.9),
+    capEnd: Math.min(20, rules.capEnd + 2 + k * 1.3),
     spawnMul: Math.max(0.55, 1 - k * 0.06),       // shorter gaps between spawns
     speedMul: 1 + Math.min(0.35, k * 0.04),
-    hp: rules.monsterHp + Math.floor(k / 3),
-    wisp: n >= 2 ? Math.min(0.4, 0.18 + k * 0.03) : 0,
-    elite: n >= 3 ? Math.min(0.28, 0.07 + (n - 3) * 0.03) : 0,
-    raid: n >= 2 ? Math.min(14, 3 + n) : 0,
+    hpMul: 1 + k * 0.08,                         // monsters get tougher every night
+    wisp: Math.min(0.4, 0.1 + k * 0.04),            // a few ghost-fires from the first night
+    elite: n >= 2 ? Math.min(0.3, 0.06 + (n - 2) * 0.03) : 0,
+    raid: Math.min(16, 2 + n * 1.5),                 // a raid every night, bigger each time
     n,
   };
 }
 
 export const MONSTER_TYPES = {
-  dokkaebi: { hp: 1, damage: 15, speed: 3.3, windup: 0.55, scale: 1, radius: 0.5, reach: 1.45, hitReach: 1.9, beads: 1 },
-  elite:    { hp: 2.6, damage: 26, speed: 2.7, windup: 0.8, scale: 1.5, radius: 0.75, reach: 2.0, hitReach: 2.6, beads: 3 },
-  boss:     { hp: 1, damage: 30, speed: 2.4, windup: 1.0, scale: 2.4, radius: 1.1, reach: 2.8, hitReach: 3.4, beads: 10 },
-  wisp:     { hp: 1, damage: 12, speed: 5.4, scale: 1, radius: 0.35, beads: 1 },
+  dokkaebi: { hp: 30, damage: 15, speed: 3.3, windup: 0.55, scale: 1, radius: 0.5, reach: 1.45, hitReach: 1.9, beads: 1 },
+  elite:    { hp: 90, damage: 26, speed: 2.7, windup: 0.8, scale: 1.5, radius: 0.75, reach: 2.0, hitReach: 2.6, beads: 3 },
+  boss:     { hp: 260, damage: 30, speed: 2.4, windup: 1.0, scale: 2.4, radius: 1.1, reach: 2.8, hitReach: 3.4, beads: 10 },
+  wisp:     { hp: 10, damage: 12, speed: 5.4, scale: 1, radius: 0.35, beads: 1 },
 };

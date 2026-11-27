@@ -7,6 +7,31 @@ import { tune } from './config.js';
 const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
 const mat = (color) => new THREE.MeshLambertMaterial({ color, flatShading: true });
 
+// soft round glow texture (shared)
+let _glow = null;
+export function glowTex() {
+  if (_glow) return _glow;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grd.addColorStop(0, 'rgba(255,255,255,1)');
+  grd.addColorStop(0.35, 'rgba(255,255,255,.45)');
+  grd.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grd; g.fillRect(0, 0, 64, 64);
+  _glow = new THREE.CanvasTexture(c);
+  return _glow;
+}
+
+/** monsters: eyes go from pale yellow by day to glowing red at night; brighter just before a hit */
+const DAY_EYE = new THREE.Color(0xfff3a0), NIGHT_EYE = new THREE.Color(0xff2a1a), HOT_EYE = new THREE.Color(0xffb0a0);
+export function setMonsterEyes(rig, night, rage = 0) {
+  if (!rig.eyeMat) return;
+  rig.eyeMat.color.copy(DAY_EYE).lerp(NIGHT_EYE, night).lerp(HOT_EYE, rage * 0.6);
+  rig.eyeGlow.material.opacity = night * 0.75 + rage * 0.5;
+  rig.eyeGlow.scale.setScalar(1 + rage * 0.6 + Math.sin(performance.now() / 120) * 0.05 * night);
+}
+
 function part(geo, material, x = 0, y = 0, z = 0, parent) {
   const m = new THREE.Mesh(geo, material);
   m.position.set(x, y, z);
@@ -71,8 +96,10 @@ export function buildCharacter(o) {
     const sh = new THREE.Group();
     sh.position.set(s * (torsoW / 2 + armW / 2 + 0.01), shoulderY, 0);
     body.add(sh);
-    part(box(armW, 0.66, armW), isMonster ? skin : top, 0, -0.28, 0, sh);
-    part(box(armW * 0.95, 0.16, armW * 0.95), skin, 0, -0.62, 0, sh); // hand
+    const armL = isMonster ? 0.82 : 0.66;
+    part(box(armW, armL, armW), isMonster ? skin : top, 0, -armL * 0.42, 0, sh);
+    part(box(armW * 0.95, 0.16, armW * 0.95), skin, 0, isMonster ? -0.76 : -0.62, 0, sh); // hand
+    if (isMonster) for (const cx of [-0.1, 0.1]) part(box(0.06, 0.12, 0.06), M(0xe8dcc0), cx, -0.88, 0.12, sh); // claws
     return sh;
   });
 
@@ -83,12 +110,27 @@ export function buildCharacter(o) {
   body.add(head);
   part(box(headS, headS, headS), skin, 0, 0, 0, head);
   const eyeY = isMonster ? 0.04 : 0.02;
+  // monster eyes use an unlit material so they can glow red at night
+  const eyeMat = isMonster ? new THREE.MeshBasicMaterial({ color: 0xfff3a0 }) : null;
+  const pupilMat = isMonster ? new THREE.MeshBasicMaterial({ color: 0x161616 }) : null;
   const eyes = [-1, 1].map((s) => {
-    const e = part(box(isMonster ? 0.13 : 0.09, isMonster ? 0.13 : 0.13, 0.04), isMonster ? M(0xfff3a0) : black, s * 0.14, eyeY, headS / 2 + 0.01, head);
+    const e = part(box(isMonster ? 0.15 : 0.09, isMonster ? 0.1 : 0.13, 0.04), isMonster ? eyeMat : black, s * 0.15, eyeY, headS / 2 + 0.01, head);
     e.castShadow = false;
-    if (isMonster) part(box(0.06, 0.06, 0.02), black, 0, 0, 0.025, e).castShadow = false;
+    if (isMonster) {
+      e.rotation.z = s * 0.28; // slanted: angry
+      part(box(0.05, 0.06, 0.02), pupilMat, s * 0.02, 0, 0.025, e).castShadow = false;
+      // heavy brow
+      const brow = part(box(0.2, 0.06, 0.06), dark, s * 0.15, eyeY + 0.1, headS / 2 + 0.02, head);
+      brow.rotation.z = s * 0.45; brow.castShadow = false;
+    }
     return e;
   });
+  let eyeGlow = null;
+  if (isMonster) {
+    eyeGlow = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.42), new THREE.MeshBasicMaterial({ color: 0xff2a1a, map: glowTex(), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+    eyeGlow.position.set(0, eyeY, headS / 2 + 0.05);
+    head.add(eyeGlow);
+  }
 
   if (!isMonster) {
     // hair cap + topknot (sangtu)
@@ -98,11 +140,24 @@ export function buildCharacter(o) {
     part(box(0.14, 0.05, 0.04), M(0xff9a9a), s(-0.2), -0.12, headS / 2 + 0.01, head).castShadow = false; // blush
     part(box(0.14, 0.05, 0.04), M(0xff9a9a), s(0.2), -0.12, headS / 2 + 0.01, head).castShadow = false;
   } else {
-    // horn, wild hair, fangs
-    part(box(0.14, 0.3, 0.14), M(0xf2e6c4), 0, headS / 2 + 0.15, 0.08, head);
-    part(box(headS + 0.06, 0.16, headS * 0.7), dark, 0, headS / 2 - 0.02, -0.12, head);
-    part(box(0.42, 0.08, 0.04), black, 0, -0.17, headS / 2 + 0.01, head).castShadow = false; // mouth
-    [-1, 1].forEach((sx) => part(box(0.07, 0.1, 0.04), white, sx * 0.13, -0.12, headS / 2 + 0.02, head).castShadow = false);
+    // two thick curved horns (bone with dark tips), wild hair, a wide fanged mouth
+    const bone = M(0xe8dcc0), tip = M(0x3a2a22);
+    [-1, 1].forEach((sx) => {
+      const h1 = part(box(0.15, 0.22, 0.15), bone, sx * 0.24, headS / 2 + 0.08, 0.02, head);
+      h1.rotation.z = -sx * 0.35;
+      const h2 = part(box(0.11, 0.2, 0.11), bone, sx * 0.33, headS / 2 + 0.25, 0.0, head);
+      h2.rotation.z = -sx * 0.75;
+      const h3 = part(box(0.07, 0.13, 0.07), tip, sx * 0.43, headS / 2 + 0.36, -0.02, head);
+      h3.rotation.z = -sx * 1.1;
+    });
+    part(box(headS + 0.08, 0.18, headS * 0.75), dark, 0, headS / 2 - 0.02, -0.12, head);
+    part(box(0.18, 0.12, 0.2), dark, 0, headS / 2 + 0.08, -0.22, head); // tuft
+    part(box(0.46, 0.17, 0.04), M(0x2a0a0a), 0, -0.18, headS / 2 + 0.01, head).castShadow = false; // open mouth
+    [-1, 1].forEach((sx) => {
+      part(box(0.07, 0.15, 0.04), white, sx * 0.16, -0.13, headS / 2 + 0.03, head).castShadow = false;  // big upper fangs
+      part(box(0.05, 0.08, 0.04), white, sx * 0.06, -0.11, headS / 2 + 0.03, head).castShadow = false;
+      part(box(0.05, 0.09, 0.04), white, sx * 0.11, -0.25, headS / 2 + 0.03, head).castShadow = false;  // lower fangs
+    });
   }
 
   // weapon in right hand (arms[1] is +x = character's left when facing +z... pick visually: use arms[0])
@@ -115,16 +170,19 @@ export function buildCharacter(o) {
     part(box(0.06, 0.34, 0.24), M(0xc7cdd6), 0, 0.12, 0.72, weapon);         // blade up
     part(box(0.07, 0.36, 0.05), M(0xe9eef5), 0, 0.12, 0.84, weapon);
   } else {
-    // spiked club (bangmangi)
-    part(box(0.12, 0.12, 0.6), M(0x7a4a24), 0, 0, 0.3, weapon);
-    part(box(0.26, 0.26, 0.5), M(0x9a6232), 0, 0, 0.78, weapon);
-    for (let i = 0; i < 3; i++) part(box(0.32, 0.06, 0.06), M(0xe8dcc0), 0, 0, 0.62 + i * 0.15, weapon);
+    // big spiked club (bangmangi)
+    part(box(0.13, 0.13, 0.65), M(0x5a3a1c), 0, 0, 0.32, weapon);
+    part(box(0.32, 0.32, 0.6), M(0x7a4a24), 0, 0, 0.86, weapon);
+    for (let i = 0; i < 4; i++) {
+      part(box(0.42, 0.07, 0.07), M(0xd9d2c0), 0, 0, 0.66 + i * 0.13, weapon);
+      part(box(0.07, 0.42, 0.07), M(0xd9d2c0), 0, 0, 0.72 + i * 0.13, weapon);
+    }
   }
 
   function s(v) { return v; }
 
   return {
-    root, spin, body, legs, arms, head, torso, eyes, weapon, mats,
+    root, spin, body, legs, arms, head, torso, eyes, weapon, mats, eyeMat, eyeGlow,
     phase: 0, amp: 0, flash: 0, baseEmissive: 0x000000,
     isMonster,
   };
@@ -155,9 +213,9 @@ export function animateCharacter(rig, st, dt) {
   const breathe = Math.sin(st.time * 2.4) * 0.012 * (1 - a);
   rig.body.position.y = -0.95 + Math.abs(Math.sin(rig.phase)) * tune.bob * a + breathe;
   rig.body.rotation.y = 0;
-  rig.spin.rotation.x = tune.lean * a;
+  rig.spin.rotation.x = tune.lean * a + (rig.isMonster ? 0.16 + 0.1 * a : 0); // monsters stoop forward
   rig.spin.rotation.z = 0;
-  rig.head.rotation.x = 0;
+  rig.head.rotation.x = rig.isMonster ? -0.18 : 0; // ...but keep glaring ahead
   rig.head.rotation.y = 0;
   armL.rotation.z = -0.06 - (1 - a) * Math.sin(st.time * 2.4) * 0.03;
   armR.rotation.z = 0.06;

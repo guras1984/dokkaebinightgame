@@ -214,3 +214,73 @@ export const ambience = {
 
 /** for automated checks */
 export const audioState = () => (ctx ? ctx.state : 'none');
+
+// ---------- background music (generated, no files) ----------
+// day: calm pentatonic plucks (가야금 느낌) / night: low drone + sparse eerie notes / battle: 장구 장단 + fast ostinato
+const SCALES = {
+  day: [261.6, 293.7, 349.2, 392.0, 440.0, 523.3, 587.3],   // 평조 느낌 (C D F G A)
+  night: [164.8, 196.0, 220.0, 246.9, 293.7, 329.6, 392.0], // 계면조 느낌 (E G A B D)
+  battle: [220.0, 261.6, 293.7, 329.6, 392.0, 440.0],
+};
+const TEMPO = { day: 84, night: 58, battle: 118 };
+
+function pluck(f, t, vol, out) {
+  const c = ctx, now = c.currentTime + t;
+  const o = c.createOscillator(), o2 = c.createOscillator(), g = c.createGain();
+  o.type = 'triangle'; o2.type = 'sine';
+  o.frequency.setValueAtTime(f * 1.03, now); o.frequency.exponentialRampToValueAtTime(f, now + 0.06); // the little string bend
+  o2.frequency.setValueAtTime(f * 2, now);
+  const g2 = c.createGain(); g2.gain.value = 0.25;
+  env(g, now, 0.004, vol, 1.1);
+  o.connect(g); o2.connect(g2); g2.connect(g); g.connect(out);
+  o.start(now); o2.start(now); o.stop(now + 1.3); o2.stop(now + 1.3);
+}
+
+export const music = {
+  mood: 'off', bus: null, beat: 0, next: 0, step: 0, drone: null, note: 3,
+  setMood(m) { this.mood = m; },
+  update() {
+    if (!ctx || ctx.state !== 'running') return;
+    if (!this.bus) {
+      this.bus = ctx.createGain(); this.bus.gain.value = 0; this.bus.connect(master);
+      // night drone: two detuned low saws through a slow filter
+      const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 220;
+      this.droneGain = ctx.createGain(); this.droneGain.gain.value = 0;
+      [55, 55.6].forEach((hz) => { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = hz; o.connect(f); o.start(); });
+      f.connect(this.droneGain); this.droneGain.connect(this.bus);
+      this.next = ctx.currentTime + 0.1;
+    }
+    const mood = muted ? 'off' : this.mood;
+    this.bus.gain.setTargetAtTime(mood === 'off' ? 0 : 0.32, ctx.currentTime, 0.8);
+    this.droneGain.gain.setTargetAtTime(mood === 'night' ? 0.09 : mood === 'battle' ? 0.05 : 0, ctx.currentTime, 1.2);
+    if (mood === 'off') return;
+    const spb = 60 / TEMPO[mood] / 2; // eighth notes
+    while (this.next < ctx.currentTime + 0.25) {
+      const t = this.next - ctx.currentTime;
+      this.playStep(mood, Math.max(0, t));
+      this.next += spb;
+      this.step++;
+    }
+  },
+  playStep(mood, t) {
+    const sc = SCALES[mood];
+    const s = this.step;
+    const walk = () => { this.note = Math.max(0, Math.min(sc.length - 1, this.note + [-2, -1, -1, 0, 1, 1, 2][Math.floor(Math.random() * 7)])); return sc[this.note]; };
+    if (mood === 'day') {
+      if (s % 2 === 0 && Math.random() < 0.7) pluck(walk(), t, 0.16, this.bus);
+      if (s % 16 === 0) pluck(sc[0] / 2, t, 0.14, this.bus);                  // low root every bar
+      if (s % 16 === 8) pluck(sc[3] / 2, t, 0.1, this.bus);
+    } else if (mood === 'night') {
+      if (s % 4 === 0 && Math.random() < 0.45) pluck(walk() / 2, t, 0.12, this.bus);
+      if (s % 32 === 16 && Math.random() < 0.6) pluck(sc[0] * 1.414, t, 0.06, this.bus); // a sour tritone now and then
+    } else {
+      // 장구: 덩(low+slap) 쿵(low) 덕(slap) in a driving 12/8-ish pattern
+      const pat = 'D.kdD.k.D.kd';
+      const ch = pat[s % pat.length];
+      if (ch === 'D') { tone({ type: 'sine', f: 95, f2: 50, t, dur: 0.22, vol: 0.5, out: this.bus }); noise({ type: 'bandpass', f: 1800, q: 1.2, t, dur: 0.05, vol: 0.3, out: this.bus }); }
+      if (ch === 'k') tone({ type: 'sine', f: 120, f2: 70, t, dur: 0.15, vol: 0.35, out: this.bus });
+      if (ch === 'd') noise({ type: 'bandpass', f: 2600, q: 2, t, dur: 0.04, vol: 0.3, out: this.bus });
+      if (s % 2 === 0) pluck(sc[[0, 2, 1, 3, 0, 4, 3, 2][(s / 2) % 8]], t, 0.12, this.bus);
+    }
+  },
+};

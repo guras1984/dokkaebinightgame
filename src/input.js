@@ -6,7 +6,7 @@ const DEADZONE = 0.12;
 const CODE_MAP = {
   KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', KeyJ: 'j', KeyK: 'k', KeyP: 'p',
   ArrowUp: 'arrowup', ArrowDown: 'arrowdown', ArrowLeft: 'arrowleft', ArrowRight: 'arrowright',
-  KeyC: 'c', Digit1: '1', Digit2: '2', Digit3: '3', Digit4: '4', Digit5: '5', Digit6: '6', Digit7: '7', Digit8: '8',
+  KeyC: 'c', KeyQ: 'q', Digit1: '1', Digit2: '2', Digit3: '3', Digit4: '4', Digit5: '5', Digit6: '6', Digit7: '7', Digit8: '8',
   Space: ' ', ShiftLeft: 'shift', ShiftRight: 'shift', Escape: 'escape',
 };
 function keyName(e) {
@@ -36,6 +36,7 @@ export class Input {
 
     this.bindButton('btn-action', 'action', true);
     this.bindButton('btn-roll', 'roll', false);
+    this.bindButton('btn-weapon', 'weapon', false);
   }
 
   static isTouchDevice() {
@@ -51,6 +52,7 @@ export class Input {
         if (k === 'k' || k === 'shift') this.pressed.add('roll');
         if (k === 'p' || k === 'escape') this.pressed.add('pause');
         if (k === 'c') this.pressed.add('craft');
+        if (k === 'q') this.pressed.add('weapon');
         if (['1', '2', '3', '4', '5', '6', '7', '8'].includes(k)) this.pressed.add('slot' + k);
       }
       this.keys.add(k);

@@ -1,11 +1,18 @@
 import * as THREE from 'three';
 import { tune, tuneRanges } from './config.js';
-import { ITEMS, USE_ORDER, RECIPES, canAfford } from './items.js';
+import { ITEMS, USE_ORDER, RECIPES, CRAFT_TABS, canAfford } from './items.js';
 import { sfx } from './sound.js';
 
 const $ = (id) => document.getElementById(id);
 const RES_KINDS = ['wood', 'stone', 'bead'];
-const costIcon = (k) => (RES_KINDS.includes(k) ? `<span class="res-icon ${k}"></span>` : `<span class="item-icon ${k} mini"></span>`);
+// card / slot pictures (emoji draw nicely on phones)
+export const EMOJI = {
+  'w-spear': '🔱', 'w-axe1': '🪓', 'w-axe2': '🪓', 'w-sword': '🗡️', 'w-mace': '🔨', 'w-bow': '🏹', arrow: '➶',
+  armor: '🦺', sandals: '👡', rod: '🎣', torch: '🔥', charm: '📜', fence: '🪵', trap: '📌', jangseung: '🗿',
+  lantern: '🏮', well: '🪣', hut: '🛖', tower: '🪨', meat: '🍖', skewer: '🍢', fishc: '🐟', herb: '🌿', fireup: '🔥',
+  fish: '🐠', berry: '🍓', rawmeat: '🥩',
+};
+const costIcon = (k) => (RES_KINDS.includes(k) ? `<span class="res-icon ${k}"></span>` : EMOJI[k] ? `<span class="emoji-mini">${EMOJI[k]}</span>` : `<span class="item-icon ${k} mini"></span>`);
 
 export class Hud {
   constructor(input) {
@@ -32,7 +39,8 @@ export class Hud {
       const b = document.createElement('button');
       b.className = 'item-btn';
       b.dataset.kind = id;
-      b.innerHTML = `<span class="item-icon ${id}"></span><b>0</b><small>${ITEMS[id].name}</small><kbd>${i + 1}</kbd>`;
+      const pic = ['skewer', 'fish', 'fishc', 'jangseung', 'trap', 'hut', 'tower'].includes(id) ? `<span class="emoji-icon">${EMOJI[id]}</span>` : `<span class="item-icon ${id}"></span>`;
+      b.innerHTML = `${pic}<b>0</b><small>${ITEMS[id].name}</small>`;
       b.hidden = true;
       b.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); this.input.pressed.add('item:' + id); this.bump(b); });
       this.el.items.appendChild(b);
@@ -94,7 +102,13 @@ export class Hud {
       this.lastAction = s.actionLabel;
     }
     e.roll.classList.toggle('cool', s.rollCool);
-    if (e.craftBtn.hidden === s.canCraft) e.craftBtn.hidden = !s.canCraft;
+    const wb = $('btn-weapon');
+    if (wb.hidden === s.weaponCount > 1) wb.hidden = !(s.weaponCount > 1);
+    if (this.lastWeapon !== s.weaponName + s.arrows) {
+      this.lastWeapon = s.weaponName + s.arrows;
+      $('weapon-name').textContent = s.weaponName;
+      $('weapon-ammo').textContent = s.weapon === 'bow' ? `화살 ${s.arrows}` : '';
+    }
     if (this.craftOpen) this.renderCraft(s);
 
     // danger: red edges in the dark, heartbeat when low on health
@@ -229,26 +243,47 @@ export class Hud {
   }
 
   renderCraft(s) {
-    const list = RECIPES.filter((r) => r.show(s));
-    const sig = list.map((r) => r.id + canAfford(s.inv, r.cost)).join() + JSON.stringify(s.inv);
+    this.craftTab = this.craftTab || 'all';
+    const list = RECIPES.filter((r) => r.show(s) && (this.craftTab === 'all' || r.cat === this.craftTab));
+    const sig = this.craftTab + list.map((r) => r.id).join() + JSON.stringify(s.inv) + s.nearFire + s.axeLevel + s.musoe + s.beomsu;
     if (sig === this.craftSig) return;
     this.craftSig = sig;
-    this.el.craftList.innerHTML = '';
-    for (const r of list) {
-      const ok = canAfford(s.inv, r.cost);
-      const row = document.createElement('div');
-      row.className = 'recipe' + (ok ? '' : ' no');
-      const cost = Object.entries(r.cost).map(([k, v]) =>
-        `<span class="cost ${(s.inv[k] || 0) >= v ? '' : 'short'}">${costIcon(k)}${v}</span>`).join('');
-      row.innerHTML = `<div class="r-text"><b>${r.name}</b><small>${r.desc}</small><div class="costs">${cost}</div></div>`;
-      const btn = document.createElement('button');
-      btn.className = 'r-btn';
-      btn.textContent = ok ? '만들기' : '부족';
-      btn.disabled = !ok;
-      btn.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); if (ok) this.input.pressed.add('make:' + r.id); });
-      row.appendChild(btn);
-      this.el.craftList.appendChild(row);
+    const tabs = $('craft-tabs');
+    tabs.innerHTML = '';
+    for (const [id, label] of CRAFT_TABS) {
+      const t = document.createElement('button');
+      t.className = 'ctab' + (this.craftTab === id ? ' on' : '');
+      t.textContent = label;
+      t.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); this.craftTab = id; this.craftSig = ''; this.renderCraft(s); });
+      tabs.appendChild(t);
     }
+    // what you can make first, then short of materials, then locked
+    const rank = (r) => (r.lock && r.lock(s) ? 2 : canAfford(s.inv, r.cost) ? 0 : 1);
+    list.sort((a, b) => rank(a) - rank(b));
+    const grid = this.el.craftList;
+    grid.innerHTML = '';
+    for (const r of list) {
+      const lock = r.lock && r.lock(s);
+      const ok = !lock && canAfford(s.inv, r.cost);
+      const card = document.createElement('button');
+      card.className = 'card' + (lock ? ' locked' : ok ? ' ok' : ' short');
+      const cost = Object.entries(r.cost).map(([k, v]) => {
+        const have = s.inv[k] || 0;
+        return `<span class="cost ${have >= v ? '' : 'short'}">${costIcon(k)}${v}</span>`;
+      }).join('');
+      const fireNote = r.fire && !s.nearFire ? '<em class="where">모닥불 옆에서</em>' : '';
+      card.innerHTML = `<span class="card-pic">${EMOJI[r.icon] || '✨'}</span><b>${r.name}</b>` +
+        (lock ? `<em class="lock">🔒 ${lock}</em>` : `<div class="costs">${cost}</div>${fireNote}`) +
+        `<small>${r.desc}</small>`;
+      card.addEventListener('pointerdown', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        if (lock) return;
+        this.input.pressed.add('make:' + r.id);
+        this.bump(card);
+      });
+      grid.appendChild(card);
+    }
+    if (!list.length) grid.innerHTML = '<p class="empty">여기는 아직 만들 것이 없다</p>';
   }
 
   // ---------- flying pickups ----------

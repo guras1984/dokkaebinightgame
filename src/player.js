@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { tune, rules } from './config.js';
 import { buildCharacter, animateCharacter, flash } from './character.js';
 import { emptyInventory } from './items.js';
+import { WEAPONS } from './weapons.js';
 
 const angDiff = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
 
@@ -22,6 +23,11 @@ export class Player {
     this.inv = emptyInventory();
     this.water = 100;
     this.food = 100;
+    this.weapons = ['axe'];
+    this.sandals = false;
+    this.rod = false;
+    this.fishT = 0;
+    this.setWeapon('axe');
     this.setAxe(0);
     this.setArmor(false);
     this.torchT = 0;
@@ -55,6 +61,41 @@ export class Player {
   }
   get ironAxe() { return this.axeLevel >= 1; }
 
+  /** show the right weapon in hand (meshes are built once, then toggled) */
+  setWeapon(id) {
+    this.weapon = id;
+    const W = this.rig.weapon;
+    if (!this.wMeshes) {
+      const lam = (c) => new THREE.MeshLambertMaterial({ color: c, flatShading: true });
+      const box = (w, h, d, c, x, y, z, g) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), lam(c)); m.position.set(x, y, z); m.castShadow = true; g.add(m); return m; };
+      const mk = () => { const g = new THREE.Group(); W.add(g); return g; };
+      this.axeParts = W.children.slice(0, 3);
+      const spear = mk();
+      box(0.06, 0.06, 1.7, 0x8a5a2b, 0, 0, 0.6, spear);
+      box(0.1, 0.05, 0.3, 0xd6dde6, 0, 0, 1.55, spear);
+      box(0.14, 0.06, 0.06, 0xc9413a, 0, 0, 1.35, spear);
+      const sword = mk();
+      box(0.08, 0.08, 0.22, 0x3a2a22, 0, 0, 0.05, sword);
+      box(0.24, 0.06, 0.06, 0xd9b04a, 0, 0, 0.18, sword);
+      box(0.05, 0.12, 0.85, 0xe6ecf2, 0, 0, 0.62, sword);
+      const mace = mk();
+      box(0.08, 0.08, 0.8, 0x5a3a22, 0, 0, 0.35, mace);
+      box(0.34, 0.34, 0.34, 0x6c7480, 0, 0, 0.85, mace);
+      for (const [x, y] of [[0.22, 0], [-0.22, 0], [0, 0.22], [0, -0.22]]) box(0.1, 0.1, 0.1, 0xb0b8c4, x, y, 0.85, mace);
+      const bow = mk();
+      for (let i = -3; i <= 3; i++) box(0.06, 0.18, 0.06, 0x8a5a2b, 0, i * 0.15, 0.2 - Math.abs(i) * Math.abs(i) * 0.025, bow);
+      box(0.015, 1.05, 0.015, 0xf2ede4, 0, 0, 0.0, bow);
+      bow.rotation.x = -Math.PI / 2;
+      const club = mk();
+      box(0.12, 0.12, 0.55, 0x8a5a2b, 0, 0, 0.28, club);
+      box(0.3, 0.3, 0.55, 0xf1c24b, 0, 0, 0.8, club);
+      for (let i = 0; i < 3; i++) box(0.36, 0.06, 0.06, 0xfff0a0, 0, 0, 0.64 + i * 0.15, club);
+      this.wMeshes = { spear, sword, mace, bow, club };
+    }
+    this.axeParts.forEach((m) => { m.visible = id === 'axe'; });
+    for (const [k, g] of Object.entries(this.wMeshes)) g.visible = k === id;
+  }
+
   /** leather armour: shoulder pads + belt, takes less damage */
   setArmor(on) {
     this.armor = on;
@@ -84,6 +125,7 @@ export class Player {
   startAttack(aimAngle) {
     if (this.attacking || this.rolling || this.dead) return false;
     this.attackT = 0;
+    this.atkTime = this.weapon === 'axe' ? tune.attackTime : WEAPONS[this.weapon].time;
     this.attackHit = false;
     if (aimAngle !== null && aimAngle !== undefined) this.facing = aimAngle;
     return true;
@@ -162,7 +204,7 @@ export class Player {
     } else {
       // slower while swinging so the chop feels planted
       const slow = this.attacking ? 0.35 : 1;
-      const target = new THREE.Vector3(wish.x, 0, wish.z).multiplyScalar(tune.moveSpeed * slow);
+      const target = new THREE.Vector3(wish.x, 0, wish.z).multiplyScalar(tune.moveSpeed * slow * (this.sandals ? 1.15 : 1));
       const rate = target.lengthSq() > this.vel.lengthSq() ? tune.accel : tune.decel;
       const diff = target.sub(this.vel);
       const step = rate * dt;
@@ -175,7 +217,7 @@ export class Player {
 
     if (this.attacking) {
       const prev = this.attackT;
-      this.attackT += dt / tune.attackTime;
+      this.attackT += dt / (this.atkTime || tune.attackTime);
       if (prev < 0.45 && this.attackT >= 0.45 && !this.attackHit) { this.attackHit = true; event = 'strike'; }
       if (this.attackT >= 1) this.attackT = -1;
     }
