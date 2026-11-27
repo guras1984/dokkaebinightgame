@@ -41,7 +41,14 @@ export function setupInstall() {
   // that's as automatic as it gets). If they say no, ask again at most once a day.
   const askedToday = () => { try { return localStorage.getItem('dk-install-asked') === new Date().toDateString(); } catch { return false; } };
   const autoAsk = async () => {
-    if (!deferred || askedToday() || $('title-screen').hidden) return;
+    if (askedToday() || $('title-screen').hidden) return;
+    if (isIOS) {
+      // iPhone: on the first tap, show the guide once (then at most once a day)
+      try { localStorage.setItem('dk-install-asked', new Date().toDateString()); } catch { /* ignore */ }
+      $('ios-guide').hidden = false;
+      return;
+    }
+    if (!deferred) return;
     try { localStorage.setItem('dk-install-asked', new Date().toDateString()); } catch { /* ignore */ }
     deferred.prompt();
     const r = await deferred.userChoice.catch(() => null);
@@ -50,7 +57,8 @@ export function setupInstall() {
   };
   $('title-screen').addEventListener('pointerdown', autoAsk, { capture: true });
 
-  // iPhone: no button (people already know "홈 화면에 추가"); the guide stays available if ever needed
+  // iPhone Safari can't open an install dialog: show the button + a picture guide instead
+  if (isIOS) $('install-btn').hidden = false;
   $('install-btn').onclick = async () => {
     if (deferred) {
       deferred.prompt();
