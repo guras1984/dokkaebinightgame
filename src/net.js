@@ -2,7 +2,7 @@
 const params = new URLSearchParams(location.search);
 // production server (Cloudflare workers.dev); on this Mac during development, the local copy
 export const SERVER = params.get('server')
-  || (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? 'http://127.0.0.1:8787' : 'https://dokkaebi-night.kjshin842.workers.dev');
+  || (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? 'http://127.0.0.1:8787' : 'https://dokkaebi-night.dokkaebi-night-server.workers.dev');
 
 const ADJ = ['용감한', '날쌘', '씩씩한', '슬기로운', '튼튼한', '반짝이는', '신나는', '든든한', '재빠른', '꿋꿋한'];
 const NOUN = ['나무꾼', '호랑이', '까치', '토끼', '곰', '여우', '해태', '거북이', '수달', '부엉이'];
