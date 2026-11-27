@@ -590,3 +590,37 @@ html, body {
 .guide .share { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 6px; background: #0a84ff; color: #fff; font-weight: 900; }
 .guide-arrow { position: absolute; left: 50%; bottom: calc(6px + var(--safe-b)); transform: translateX(-50%); font-size: 48px; color: #ffd27a; text-shadow: 0 2px 8px rgba(0,0,0,.6); animation: bounceDown 1s ease-in-out infinite; pointer-events: none; }
 @keyframes bounceDown { 50% { transform: translate(-50%, 10px); } }
+
+/* ---------- 같이 하기 ---------- */
+.panel .together { display: block; width: 100%; margin-top: 10px; padding: 12px; border-radius: 14px; border: 2px solid rgba(143, 224, 138, .7); background: rgba(80, 170, 90, .2); color: #d8ffd4; font-family: inherit; font-weight: 900; font-size: 17px; }
+.panel .together small { display: block; font-size: 11px; color: var(--ink-dim); font-weight: 700; }
+.mp-panel { width: min(440px, 100%); text-align: left; max-height: 88vh; display: flex; flex-direction: column; }
+.mp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.mp-head b { font-size: 20px; }
+.mp-panel .icon-btn, .mp-panel .chip-btn, .mp-panel .ctab { display: inline-block; width: auto; margin: 0; }
+.mp-nick { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-dim); margin-bottom: 10px; }
+.mp-nick b { color: #ffe1a1; font-size: 15px; }
+#mp-tabs { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+#mp-body { overflow-y: auto; display: grid; gap: 8px; }
+.mp-msg { min-height: 18px; color: #ffb3a8 !important; font-size: 13px !important; margin: 8px 0 0 !important; }
+.room-row { display: grid; grid-template-columns: 30px 1fr auto; gap: 8px; align-items: center; padding: 10px; border-radius: 12px; background: rgba(255,255,255,.06); }
+.room-row .pic { font-size: 20px; text-align: center; }
+.room-row b { display: block; font-size: 14px; }
+.room-row small { font-size: 11px; color: var(--ink-dim); }
+.panel .room-row button, .panel .mp-form button { display: inline-block; width: auto; margin: 0; padding: 9px 14px; font-size: 14px; }
+.mp-form { display: grid; gap: 10px; }
+.mp-form label { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; }
+.mp-form input[type=text], .mp-form input[type=tel] { width: 120px; padding: 10px; border-radius: 10px; border: 1px solid var(--panel-line); background: rgba(0,0,0,.3); color: var(--ink); font-size: 18px; font-weight: 900; text-align: center; letter-spacing: .2em; font-family: inherit; }
+.mp-form .primary { width: 100% !important; display: block !important; }
+.mp-hint { font-size: 12px; color: var(--ink-dim); line-height: 1.5; }
+#room-info { margin: 6px 0 4px; padding: 10px; border-radius: 12px; background: rgba(143, 224, 138, .12); font-size: 13px; line-height: 1.6; }
+#room-info b { color: #d8ffd4; }
+#tags { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.name-tag { position: absolute; left: 0; top: 0; display: grid; justify-items: center; gap: 2px; pointer-events: none; }
+.name-tag b { font-size: 12px; font-weight: 900; color: var(--c); text-shadow: 0 1px 2px #000, 0 0 4px #000; white-space: nowrap; }
+.name-tag .hpbar { width: 36px; height: 4px; border-radius: 3px; background: rgba(0,0,0,.5); overflow: hidden; }
+.name-tag .hpbar i { display: block; height: 100%; background: #ff6b6b; }
+.emote-bubble { position: absolute; left: 0; top: 0; padding: 5px 10px; border-radius: 12px; background: #fff8ea; color: #2a1a10; font-size: 13px; font-weight: 900; white-space: nowrap; box-shadow: 0 3px 8px rgba(0,0,0,.4); }
+#emote-menu { position: absolute; right: calc(18px + var(--safe-r)); bottom: calc(200px + var(--safe-b)); z-index: 5; display: grid; grid-template-columns: repeat(4, 64px); gap: 6px; padding: 8px; border-radius: 16px; background: rgba(20,24,44,.92); border: 1px solid var(--panel-line); pointer-events: auto; }
+#emote-menu button { height: 52px; border-radius: 12px; border: 0; background: rgba(255,255,255,.08); color: var(--ink); font-family: inherit; font-size: 11px; font-weight: 800; display: grid; place-items: center; }
+#emote-menu button span { font-size: 20px; }

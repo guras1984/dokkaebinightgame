@@ -71,6 +71,8 @@
       <span class="dlg-next">눌러서 계속 ▼</span>
     </div>
     <div id="popups"></div>
+    <div id="tags"></div>
+    <div id="emote-menu" hidden></div>
 
     <!-- Touch controls -->
     <div id="touch" hidden>
@@ -79,6 +81,7 @@
       <div id="item-bar"></div>
       <div class="btns">
         <button id="btn-weapon" class="gbtn small" hidden><span class="gi" id="weapon-icon">🪓</span><span class="gl" id="weapon-name">도끼</span><small id="weapon-ammo"></small></button>
+        <button id="btn-emote" class="gbtn small" hidden><span class="gi">💬</span><span class="gl">말</span></button>
         <button id="btn-roll" class="gbtn small roll"><span class="gi">🌀</span><span class="gl">구르기</span></button>
         <button id="btn-action" class="gbtn big"><span class="gi" id="action-icon">🪓</span><span class="gl" id="action-label">베기</span></button>
       </div>
@@ -105,6 +108,7 @@
         </div>
         <button id="install-btn" class="install" hidden>📲 앱으로 설치하기 <small>홈 화면에 아이콘이 생겨요</small></button>
         <button id="continue-btn" class="primary" hidden>이어하기</button>
+        <button id="together-btn" class="together">👫 같이 하기 <small>친구와 한 섬에서</small></button>
         <button id="start-btn" class="primary">첫째 날 시작</button>
         <div class="mode-pick">
           <span>난이도</span>
@@ -135,6 +139,16 @@
       <div class="guide-arrow">⬇︎</div>
     </section>
 
+    <section id="mp-screen" class="screen" hidden>
+      <div class="panel mp-panel">
+        <div class="mp-head"><b>👫 같이 하기</b><button id="mp-close" class="icon-btn" aria-label="닫기">✕</button></div>
+        <div class="mp-nick">내 이름 <b id="mp-nick">용감한 까치</b> <button id="mp-reroll" class="chip-btn">🔄 바꾸기</button></div>
+        <div id="mp-tabs"></div>
+        <div id="mp-body"></div>
+        <p class="mp-msg" id="mp-msg"></p>
+      </div>
+    </section>
+
     <section id="meta-screen" class="screen" hidden>
       <div class="panel meta-panel">
         <div class="meta-head"><div id="meta-tabs"></div><button id="meta-close" class="icon-btn" aria-label="닫기">✕</button></div>
@@ -146,6 +160,7 @@
       <div class="panel">
         <h2>잠시 멈춤</h2>
         <button id="resume-btn" class="primary">계속하기</button>
+        <div id="room-info" hidden></div>
         <button id="mute-btn" class="ghost">소리 끄기</button>
         <button id="gfx-btn" class="ghost">그래픽: 보통</button>
         <button id="quit-btn" class="ghost">처음으로</button>

@@ -97,6 +97,8 @@ export class Minimap {
       g.fillText(l.state === 'sealed' ? '◆' : '!', sx, sy);
     }
     for (const v of s.village.people) if (v.state !== 'caged') dot(v.pos.x, v.pos.z, big ? 3 : 2.5, '#7be07a');
+    // friends in the same room: their colour, white rim
+    for (const f of s.friends || []) dot(f.pos.x, f.pos.z, big ? 5 : 4, '#' + f.color.toString(16).padStart(6, '0'), '#ffffff');
     // fire
     dot(w.fire.x, w.fire.z, big ? 6 : 4.5, '#ff8a1a', '#ffe27a');
     // monsters: shown when close, always red; the chief big

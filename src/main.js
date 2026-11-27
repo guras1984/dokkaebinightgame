@@ -17,6 +17,8 @@ import { XP, xpNeed, rollPerks, PERKS } from './perks.js';
 import { Meta, MONSTER_INFO, ACHIEVEMENTS, GIFTS, OUTFITS, UPGRADES, upgradeCost, runCoins } from './meta.js';
 import { Dog } from './pet.js';
 import { setupInstall } from './install.js';
+import { Net, listRooms, createRoom, myNick, setNick, randomNick, EMOTES, SERVER as SERVER_URL } from './net.js';
+import { Friends } from './together.js';
 import { PROLOGUE, campLine } from './story.js';
 import { WEAPONS, WEAPON_ORDER, CRIT_CHANCE, CRIT_MUL, weaponDmg, weaponChop } from './weapons.js';
 import { sfx, unlock, ambience, music, isMuted, setMuted, audioState } from './sound.js';
@@ -110,6 +112,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
 };
 const meta = new Meta();
+let mp = null; // 같이 하기: { net, code, pw, seed, startDay, start, room }
 function showBest() {
   const b = parseInt(store.get('dokkaebi.best') || '0', 10);
   $('best').textContent = b > 0 ? `최고 기록: ${b}일 밤` : '';
@@ -142,13 +145,13 @@ function readSave() {
   try { const d = JSON.parse(store.get(SAVE_KEY) || 'null'); return d && d.v >= 1 ? d : null; } catch { return null; }
 }
 function saveGame() {
-  store.set(SAVE_KEY, JSON.stringify({
+  store.set(mp ? 'dokkaebi.mp.' + mp.code : SAVE_KEY, JSON.stringify({
     v: 1, day, mode, t: +daynight.time.toFixed(1), pos: [+player.pos.x.toFixed(2), +player.pos.z.toFixed(2)], seed: world.seed, explored: minimap.serialize(), inv: player.inv, ironAxe: player.ironAxe, axeLevel: player.axeLevel, armor: player.armor, hp: Math.round(player.hp),
     villagers: village.inCamp.map((p) => p.def.id), level: player.level, xp: player.xp, perks: player.perks || [], pearls: player.pearls || 0, dog: dog.tamed, weapons: player.weapons, weapon: player.weapon, sandals: !!player.sandals, rod: !!player.rod,
     water: Math.round(player.water), food: Math.round(player.food),
     fireLv: world.fire.level, fuel: Math.round(world.fire.fuel), stats: player.stats, camp: camp.serialize(),
   }));
-  showContinue();
+  if (!mp) showContinue();
 }
 function showContinue() {
   const d = readSave();
@@ -164,6 +167,184 @@ function showContinue() {
 }
 showContinue();
 setupInstall();
+
+// ---------- 같이 하기 (rooms) ----------
+const friends = new Friends(scene, $('tags'));
+const CYCLE = () => rules.dayLength + rules.duskLength + rules.nightLength;
+/** the room's shared clock → day and time of day */
+function mpClock() {
+  const el = Math.max(0, (mp.net.now() - mp.start) / 1000);
+  return { day: mp.startDay + Math.floor(el / CYCLE()), time: el % CYCLE() };
+}
+function readMpSave(code) { try { const d = JSON.parse(store.get('dokkaebi.mp.' + code) || 'null'); return d && d.v >= 1 ? d : null; } catch { return null; } }
+
+function bindNet(net) {
+  net.on('join', (m) => { friends.add(m.p); hud.toast(`${m.p.name} 님이 들어왔다 👋`, 2.2); sfx('chest'); })
+    .on('p', (m) => friends.update(m))
+    .on('leave', (m) => { const f = friends.map.get(m.id); if (f) hud.toast(`${f.name} 님이 나갔다`, 1.8); friends.remove(m.id); })
+    .on('emote', (m) => { if (friends.emote(m.id, m.k)) sfx('pickup', 3); })
+    .on('lost', () => reconnect(1));
+}
+
+async function joinRoom(code, pw) {
+  const net = new Net();
+  bindNet(net);
+  const w = await net.join(code, pw, meta.outfit);
+  mp = { net, code, pw, seed: w.seed, startDay: w.startDay, start: w.start, room: w.room, sendT: 0 };
+  friends.clear();
+  for (const p of w.players) friends.add(p);
+  $('mp-screen').hidden = true;
+  startGame(readMpSave(code));
+  $('btn-emote').hidden = false;
+  hud.banner(`👫 ${w.room.name || '같이 하기'}`, `방 번호 ${code}${w.room.locked ? ' · 🔒' : ''} · ${friends.count + 1}명`, 3);
+}
+
+async function reconnect(attempt) {
+  if (!mp || attempt > 6) { if (mp) { hud.toast('연결이 끊겼다. 혼자 하기로 돌아간다', 3); leaveRoom(true); } return; }
+  hud.toast(`연결이 끊겼다… 다시 연결 중 (${attempt})`, 1.8);
+  try {
+    const net = new Net();
+    bindNet(net);
+    const w = await net.join(mp.code, mp.pw, meta.outfit);
+    mp.net = net; mp.start = w.start;
+    friends.clear();
+    for (const p of w.players) friends.add(p);
+    hud.toast('다시 연결됐다!', 1.6);
+  } catch {
+    setTimeout(() => reconnect(attempt + 1), 2000);
+  }
+}
+
+function leaveRoom(toTitle = false) {
+  if (!mp) return;
+  saveGame();
+  mp.net.leave();
+  mp = null;
+  friends.clear();
+  $('btn-emote').hidden = true;
+  $('emote-menu').hidden = true;
+  if (toTitle) $('quit-btn').onclick();
+}
+
+/** every frame while together: follow the room clock, send where I am, draw friends */
+function mpTick(dt) {
+  const ck = mpClock();
+  if (ck.day > day) { day = ck.day - 1; newDay(); }
+  if (Math.abs(daynight.time - ck.time) > 1.5) daynight.time = ck.time;
+  mp.sendT -= dt;
+  if (mp.sendT <= 0 && mp.net.open) {
+    mp.sendT = 0.125; // 8 times a second
+    const a = (player.attacking ? 1 : 0) | (player.rolling ? 2 : 0) | (player.dead ? 4 : 0);
+    mp.net.send({ t: 'p', x: +player.pos.x.toFixed(2), z: +player.pos.z.toFixed(2), f: +player.facing.toFixed(2), s: +Math.min(1, Math.hypot(player.vel.x, player.vel.z) / tune.moveSpeed).toFixed(2), a, hp: Math.round(player.hp / player.maxHp * 100), w: player.weapon, look: meta.outfit });
+  }
+  friends.frame(dt, camera.cam);
+}
+
+// emote menu (preset messages only: safe for kids)
+(() => {
+  const menu = $('emote-menu');
+  for (const e of EMOTES) {
+    const b = document.createElement('button');
+    b.innerHTML = `<span>${e.icon}</span>${e.text}`;
+    b.addEventListener('pointerdown', (ev) => {
+      ev.preventDefault(); ev.stopPropagation();
+      menu.hidden = true;
+      if (!mp) return;
+      mp.net.send({ t: 'emote', k: e.k });
+      hud.popup(`${e.icon} ${e.text}`, { x: player.pos.x, y: 2.8, z: player.pos.z }, camera.cam, 'wood big');
+    });
+    menu.appendChild(b);
+  }
+  $('btn-emote').addEventListener('pointerdown', (ev) => { ev.preventDefault(); ev.stopPropagation(); menu.hidden = !menu.hidden; });
+})();
+
+// rooms screen
+let mpTab = 'list';
+function mpMsg(t) { $('mp-msg').textContent = t || ''; }
+async function showRooms(tab = mpTab) {
+  mpTab = tab;
+  $('mp-screen').hidden = false;
+  $('mp-nick').textContent = myNick();
+  mpMsg('');
+  const tabs = $('mp-tabs');
+  tabs.innerHTML = '';
+  for (const [id, label] of [['list', '🌐 방 목록'], ['create', '➕ 방 만들기'], ['code', '🔢 번호로 들어가기']]) {
+    const t = document.createElement('button');
+    t.className = 'ctab' + (id === tab ? ' on' : '');
+    t.textContent = label;
+    t.onclick = () => showRooms(id);
+    tabs.appendChild(t);
+  }
+  const body = $('mp-body');
+  body.innerHTML = '';
+  const tryJoin = async (code, pw) => {
+    mpMsg('들어가는 중…');
+    try { unlock(); await joinRoom(code, pw); } catch (err) { mpMsg(err.message); }
+  };
+  if (tab === 'list') {
+    body.innerHTML = '<p class="mp-hint">불러오는 중…</p>';
+    let rooms = [];
+    try { rooms = await listRooms(); } catch { body.innerHTML = '<p class="mp-hint">서버에 연결할 수 없어요. 잠시 뒤 다시 해 주세요.</p>'; return; }
+    if (mpTab !== 'list') return;
+    body.innerHTML = rooms.length ? '' : '<p class="mp-hint">지금 열린 방이 없어요. "방 만들기"로 먼저 만들어 보세요!</p>';
+    for (const r of rooms) {
+      const row = document.createElement('div');
+      row.className = 'room-row';
+      row.innerHTML = `<span class="pic">${r.locked ? '🔒' : '🌐'}</span><div><b>${r.name || '도깨비 방'}</b><small>방 번호 ${r.code} · ${r.n}/${r.max}명</small></div>`;
+      const b = document.createElement('button');
+      b.className = 'primary';
+      b.textContent = r.n >= r.max ? '가득' : '들어가기';
+      b.disabled = r.n >= r.max;
+      b.onclick = () => {
+        if (!r.locked) { tryJoin(r.code, ''); return; }
+        const pw = prompt('비밀번호 (숫자)를 넣어 주세요');
+        if (pw) tryJoin(r.code, pw);
+      };
+      row.appendChild(b);
+      body.appendChild(row);
+    }
+    const refresh = document.createElement('button');
+    refresh.className = 'ghost';
+    refresh.textContent = '🔄 새로고침';
+    refresh.onclick = () => showRooms('list');
+    body.appendChild(refresh);
+  } else if (tab === 'create') {
+    const pw0 = String(1000 + Math.floor(Math.random() * 9000));
+    body.innerHTML = `<div class="mp-form">
+      <label>🔒 비밀번호 방 <input type="checkbox" id="mp-lock" checked></label>
+      <label id="mp-pw-row">비밀번호 (숫자) <input type="tel" id="mp-pw" maxlength="6" value="${pw0}"></label>
+      <p class="mp-hint">🔒 비밀번호 방: 방 번호와 비밀번호를 친구에게 알려 줘야 들어올 수 있어요.<br>🌐 비밀번호 없는 방: 방 목록에 보여서 누구나 들어올 수 있어요.</p>
+      <button class="primary" id="mp-make">방 만들고 들어가기</button></div>`;
+    const lock = $('mp-lock');
+    lock.onchange = () => { $('mp-pw-row').style.display = lock.checked ? '' : 'none'; };
+    $('mp-make').onclick = async () => {
+      const pw = lock.checked ? $('mp-pw').value.replace(/\D/g, '') : '';
+      if (lock.checked && pw.length < 4) { mpMsg('비밀번호는 숫자 4자리 이상'); return; }
+      mpMsg('방을 만드는 중…');
+      try {
+        const code = await createRoom(`${myNick()}의 방`, pw);
+        await tryJoin(code, pw);
+      } catch (err) { mpMsg(err.message || '방을 만들지 못했어요'); }
+    };
+  } else {
+    body.innerHTML = `<div class="mp-form">
+      <label>방 번호 <input type="tel" id="mp-code" maxlength="4" placeholder="1234"></label>
+      <label>비밀번호 <input type="tel" id="mp-pw2" maxlength="6" placeholder="없으면 비움"></label>
+      <button class="primary" id="mp-go">들어가기</button></div>`;
+    $('mp-go').onclick = () => {
+      const code = $('mp-code').value.replace(/\D/g, '');
+      if (code.length !== 4) { mpMsg('방 번호 4자리를 넣어 주세요'); return; }
+      tryJoin(code, $('mp-pw2').value.replace(/\D/g, ''));
+    };
+  }
+}
+$('together-btn').onclick = () => { unlock(); showRooms('list'); };
+// the button only shows when the room server answers (so nobody sees a broken button)
+$('together-btn').hidden = true;
+fetch(SERVER_URL + '/', { cache: 'no-store' }).then((r) => r.json()).then((j) => { if (j && j.ok) $('together-btn').hidden = false; }).catch(() => {});
+$('mp-close').onclick = () => { $('mp-screen').hidden = true; };
+$('mp-screen').addEventListener('pointerdown', (e) => { if (e.target.id === 'mp-screen') $('mp-screen').hidden = true; });
+$('mp-reroll').onclick = () => { setNick(randomNick()); $('mp-nick').textContent = myNick(); };
 
 // ---------- title: bestiary / achievements / outfits / start gift ----------
 const MONSTER_PIC = { dokkaebi: '👹', wisp: '🔵', elite: '👺', centipede: '🐛', fox: '🦊', shadow: '👤', bulgasari: '🐻', boss: '👑', imugi: '🐍', dragon: '🐉' };
@@ -263,9 +444,9 @@ function startGame(save = null) {
   monsters.reset();
   camp.reset();
   // every new run gets its own island; a saved run rebuilds the same one
-  day = save ? save.day : parseInt(params.get('day') || '1', 10);
+  day = mp ? mpClock().day : save ? save.day : parseInt(params.get('day') || '1', 10);
   world.day = day;
-  world.generate(save && save.seed ? save.seed : (Math.random() * 1e9) >>> 0);
+  world.generate(mp ? mp.seed : save && save.seed ? save.seed : (Math.random() * 1e9) >>> 0);
   village.relayout();
   minimap.reset();
   if (save && save.explored) minimap.restore(save.explored);
@@ -279,7 +460,7 @@ function startGame(save = null) {
   critters.repopulate(world, player.pos.x, player.pos.z);
   world.setFireLevel(0);
   world.fire.fuel = rules.fireStart;
-  daynight.time = parseFloat(params.get('t') || '0');   // ?t=150 → start near dusk
+  daynight.time = mp ? mpClock().time : parseFloat(params.get('t') || '0');   // ?t=150 → start near dusk
   announced = {};
   hitStop = 0;
   eyes.clear();
@@ -294,7 +475,7 @@ function startGame(save = null) {
   camera.snap(player.pos);
   spawnDayChests(true);
   if (save) {
-    day = save.day;
+    if (!mp) day = save.day;
     if (save.mode) { mode = save.mode; showMode(); }
     Object.assign(player.inv, save.inv);
     player.setAxe(save.axeLevel ?? (save.ironAxe ? 1 : 0));
@@ -311,7 +492,7 @@ function startGame(save = null) {
     world.setFireLevel(save.fireLv);
     world.fire.fuel = save.fuel;
     camp.restore(save.camp);
-    daynight.time = save.t || 0;
+    if (!mp) daynight.time = save.t || 0;
     if (save.pos) { player.pos.set(save.pos[0], 0, save.pos[1]); world.resolve(player.pos, 0.42); camera.snap(player.pos); }
     hud.banner(`${day}일째`, '이어서 버텨라', 2.6);
     return;
@@ -397,6 +578,11 @@ function showControls(on) {
 
 function setPaused(p) {
   if (state === 'over' || state === 'title' || state === 'talk') return;
+  const ri = document.getElementById('room-info');
+  if (ri) {
+    ri.hidden = !mp;
+    if (mp) ri.innerHTML = `👫 <b>${mp.room.name || '같이 하기'}</b><br>방 번호 <b>${mp.code}</b>${mp.pw ? ` · 비밀번호 <b>${mp.pw}</b>` : ' · 비밀번호 없음'}<br>함께: ${[myNick(), ...friends.list.map((f) => f.name)].join(', ')}<br><small>"처음으로"를 누르면 방에서 나가요 (내 가방은 저장돼요)</small>`;
+  }
   if (p && state === 'playing') saveGame();
   state = p ? 'paused' : 'playing';
   $('pause-screen').hidden = !p;
@@ -545,6 +731,7 @@ $('resume-btn').onclick = () => setPaused(false);
 $('pause-screen').addEventListener('pointerdown', (e) => { if (e.target.id === 'pause-screen') setPaused(false); });
 $('summary').addEventListener('pointerdown', (e) => { if (e.target.id === 'summary') $('sum-btn').onclick(); });
 $('quit-btn').onclick = () => {
+  if (mp) leaveRoom();
   state = 'title';
   $('pause-screen').hidden = true;
   $('title-screen').hidden = false;
@@ -1492,6 +1679,19 @@ function tick(dt) {
   }
   daynight.blood = tonight === 'bloodmoon' ? 1 : 0;
 
+  if (mp && player.dead && !(player.revives > 0)) {
+    // together: no game over — get back up at the campfire after a few seconds
+    if (mp.downT === undefined) { mp.downT = 5; hud.banner('쓰러졌다…', '5초 뒤 모닥불 옆에서 일어난다', 3); sfx('lose'); }
+    mp.downT -= dt;
+    if (mp.downT <= 0) {
+      mp.downT = undefined;
+      player.dead = false; player.hp = Math.round(player.maxHp * 0.6); player.invuln = 3;
+      player.rig.spin.rotation.z = 0;
+      player.pos.set(world.fire.x + 1.5, 0, world.fire.z + 1.5);
+      camera.snap(player.pos);
+      sfx('dawn');
+    }
+  }
   if (player.dead && player.revives > 0) {
     // 다시 일어나기 (수련): once per run
     player.revives -= 1;
@@ -1504,7 +1704,7 @@ function tick(dt) {
     hud.banner('다시 일어났다!', '수련의 힘 (이번 판 한 번)', 2.6);
     sfx('dawn');
   }
-  if (player.dead) { endGame(false); }
+  if (player.dead && !mp) { endGame(false); }
   else if (phase === 'dawn') newDay();
 
   const lead = tmp.set(player.vel.x, 0, player.vel.z).multiplyScalar(1 / Math.max(1, tune.moveSpeed));
@@ -1529,7 +1729,8 @@ function tick(dt) {
   if (autoSaveT <= 0 && !player.dead) { autoSaveT = 45; saveGame(); }
   const goal = currentGoal(phase, inLight, c.fireR);
   hud.setGoal(goal, player.pos, camera.cam);
-  minimap.update(dt, { player, world, camp, village, monsters: monsters.alive, darkness, goal: goal && goal.target });
+  minimap.update(dt, { player, world, camp, village, monsters: monsters.alive, darkness, goal: goal && goal.target, friends: friends.list });
+  if (mp) mpTick(dt);
   const chest = chestNear();
   hud.update({
     dt, time: nowS, hp: player.hp, hpMax: player.maxHp, inv: player.inv, fuel: world.fire.fuel, fuelMax: world.fire.max,
