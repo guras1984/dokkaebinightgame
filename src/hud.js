@@ -5,6 +5,9 @@ import { sfx } from './sound.js';
 
 const $ = (id) => document.getElementById(id);
 const RES_KINDS = ['wood', 'stone', 'bead'];
+// the big action button changes picture and colour with what it will do
+const ACTION_ICON = { '베기': '🪓', '장작 넣기': '🔥', '열기': '📦', '따기': '🍓', '물 마시기': '💧', '말 걸기': '💬', '구하기': '🔓', '고치기': '🔧', '강화': '⬆️', '낚시': '🎣', '낚시 중': '🎣', '먹이 주기': '🦴' };
+const ACTION_KIND = { '장작 넣기': 'fire', '물 마시기': 'water', '낚시': 'water', '낚시 중': 'water', '말 걸기': 'talk', '구하기': 'gold', '열기': 'gold', '따기': 'gold', '고치기': 'build', '강화': 'build', '먹이 주기': 'gold' };
 // card / slot pictures (emoji draw nicely on phones)
 export const EMOJI = {
   'w-spear': '🔱', 'w-axe1': '🪓', 'w-axe2': '🪓', 'w-sword': '🗡️', 'w-mace': '🔨', 'w-bow': '🏹', arrow: '➶',
@@ -99,6 +102,9 @@ export class Hud {
 
     if (s.actionLabel !== this.lastAction) {
       e.actionLabel.textContent = s.actionLabel;
+      $('action-icon').textContent = ACTION_ICON[s.actionLabel] || '🪓';
+      e.action.dataset.kind = ACTION_KIND[s.actionLabel] || 'attack';
+      this.bump(e.action, 'swap');
       e.action.classList.toggle('feed', s.actionLabel === '장작 넣기');
       e.action.classList.toggle('open', s.actionLabel === '열기' || s.actionLabel === '따기');
       e.action.classList.toggle('drink', s.actionLabel === '물 마시기');
@@ -112,6 +118,7 @@ export class Hud {
     if (this.lastWeapon !== s.weaponName + s.arrows) {
       this.lastWeapon = s.weaponName + s.arrows;
       $('weapon-name').textContent = s.weaponName;
+      $('weapon-icon').textContent = { axe: '🪓', spear: '🔱', sword: '🗡️', mace: '🔨', bow: '🏹', club: '🏏' }[s.weapon] || '🪓';
       $('weapon-ammo').textContent = s.weapon === 'bow' ? `화살 ${s.arrows}` : '';
     }
     if (this.craftOpen) this.renderCraft(s);
