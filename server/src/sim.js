@@ -114,6 +114,7 @@ export class Sim {
   /** one step of the shared world. players: [{ id, pos:{x,z}, facing, dead, rolling }] */
   step(dt, players) {
     if (!players.length) return;
+    this.monsters.party = players.length;   // more friends → more and tougher monsters
     const ck = this.clock();
     // a new day: monsters leave, a new kind of night is picked
     if (ck.day !== this.day) {

@@ -381,7 +381,7 @@ export class Serpent extends Beast {
   constructor(scene, x, z, diff, dragon = false) {
     super(scene, dragon ? 'dragon' : 'imugi', x, z, diff);
     this.dragon = dragon;
-    this.hp = Math.round(this.T.hp + diff.n * (dragon ? 10 : 20));
+    this.hp = Math.round((this.T.hp + diff.n * (dragon ? 10 : 20)) * (diff.bossMul || 1));
     this.maxHp = this.hp;
     const skin = this.M(dragon ? 0xd9a020 : 0x2f5a4a), belly = this.M(dragon ? 0xfff0a0 : 0xd9c78a), dark = this.M(0x1a2a22);
     this.headG = new THREE.Group(); this.root.add(this.headG);

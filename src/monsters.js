@@ -36,7 +36,7 @@ class Dokkaebi {
     this.pos.set(x, 0, z);
     this.vel = new THREE.Vector3();
     this.knock = new THREE.Vector3();
-    this.hp = boss ? Math.round(T.hp + diff.n * 14) : Math.round(T.hp * diff.hpMul);
+    this.hp = boss ? Math.round((T.hp + diff.n * 14) * (diff.bossMul || 1)) : Math.round(T.hp * diff.hpMul);
     this.slamT = 0;
     this.summonT = 8;
     this.maxHp = this.hp;
@@ -352,9 +352,18 @@ export class Monsters {
 
   get alive() { return this.list.filter((m) => m.alive); }
 
+  /** night difficulty, made harder when friends play together (party = players in the room) */
+  dif(night) {
+    const d = difficulty(night);
+    const x = Math.max(0, Math.min(5, (this.party || 1) - 1));
+    if (!x) return d;
+    return { ...d, hpMul: d.hpMul * (1 + 0.2 * x), capStart: d.capStart * (1 + 0.4 * x), capEnd: d.capEnd * (1 + 0.4 * x),
+      spawnMul: d.spawnMul / (1 + 0.3 * x), raid: Math.round(d.raid * (1 + 0.5 * x)), bossMul: 1 + 0.5 * x };
+  }
+
   update(dt, ctx, nightProgress, night) {
     if (nightProgress >= 0) {
-      const d = difficulty(night);
+      const d = this.dif(night);
       const interval = (rules.spawnStart + (rules.spawnEnd - rules.spawnStart) * nightProgress) * d.spawnMul;
       const cap = Math.round(d.capStart + (d.capEnd - d.capStart) * nightProgress);
       this.spawnTimer -= dt;
@@ -374,7 +383,7 @@ export class Monsters {
         // the fox splits into look-alikes that vanish when struck
         for (const s of [-1, 1]) {
           const a = m.facing + s * 1.2;
-          const c = new Fox(this.scene, m.pos.x + Math.sin(a) * 1.6, m.pos.z + Math.cos(a) * 1.6, difficulty(night), true);
+          const c = new Fox(this.scene, m.pos.x + Math.sin(a) * 1.6, m.pos.z + Math.cos(a) * 1.6, this.dif(night), true);
           this.list.push(c);
         }
         this.effects.spawn(m.pos.x, 1, m.pos.z, 0xffc080, { n: 14, speed: 3, up: 2, life: 0.6, size: 0.14, grav: -1 });
@@ -453,7 +462,7 @@ export class Monsters {
 
   spawnBoss(ctx, night) {
     const type = night >= rules.totalNights ? 'dragon' : night % 10 === 0 ? 'imugi' : 'boss';
-    const m = this.spawn(ctx, difficulty(night), type);
+    const m = this.spawn(ctx, this.dif(night), type);
     this.boss = m;
     return m;
   }
@@ -489,7 +498,7 @@ export class Monsters {
   }
 
   spawnAt(ctx, night, type, x, z, opts = {}) {
-    const d = difficulty(Math.max(1, night));
+    const d = this.dif(Math.max(1, night));
     const m = this.create(type, x, z, d);
     Object.assign(m, opts);
     if (opts.hpMul) { m.hp = Math.round(m.hp * opts.hpMul); m.maxHp = m.hp; }
@@ -501,7 +510,7 @@ export class Monsters {
 
   /** lair guards: stay near home (x,z) and only fight you there */
   spawnGuards(night, types, x, z) {
-    const d = difficulty(Math.max(1, night));
+    const d = this.dif(Math.max(1, night));
     return types.map((type, i) => {
       const a = (i / types.length) * Math.PI * 2;
       const gx = x + Math.sin(a) * 2.6, gz = z + Math.cos(a) * 2.6;
@@ -516,7 +525,7 @@ export class Monsters {
 
   /** two helpers pop out right next to (x,z) */
   summon(ctx, night, x, z) {
-    const d = difficulty(night);
+    const d = this.dif(night);
     for (let i = 0; i < 2; i++) {
       const a = Math.random() * Math.PI * 2;
       const m = new Dokkaebi(this.scene, x + Math.sin(a) * 2.2, z + Math.cos(a) * 2.2, this.count++, 'dokkaebi', d);
@@ -527,7 +536,7 @@ export class Monsters {
 
   /** a pack from one side of the island. returns the angle they come from */
   raid(ctx, night) {
-    const d = difficulty(night);
+    const d = this.dif(night);
     const dir = Math.random() * Math.PI * 2;
     for (let i = 0; i < d.raid; i++) {
       const r = Math.random();

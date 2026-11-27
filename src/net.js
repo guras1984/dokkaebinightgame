@@ -14,6 +14,19 @@ export function myNick() { let n = store.get('dokkaebi.nick'); if (!n) { n = ran
 export function setNick(n) { store.set('dokkaebi.nick', n); }
 export function myPid() { let p = store.get('dokkaebi.pid'); if (!p) { p = Math.random().toString(36).slice(2, 10); store.set('dokkaebi.pid', p); } return p; }
 
+// room names are made by the game (도깨비 theme) — kids never type one
+const R_A = ['달빛', '불꽃', '안개', '푸른', '은빛', '붉은', '별빛', '반딧불', '구름', '이슬', '보름달', '새벽'];
+const R_B = ['도깨비불 마을', '방망이 숲', '혹부리 고개', '금도끼 연못', '해태 언덕', '장승 마당', '달맞이 섬', '솔밭 동굴', '대나무 숲', '신령 샘', '여우 고개', '이무기 늪'];
+/** a 도깨비-style room name that no open room is using */
+export function roomName(taken = []) {
+  const used = new Set(taken);
+  for (let i = 0; i < 50; i++) {
+    const n = `${R_A[Math.floor(Math.random() * R_A.length)]} ${R_B[Math.floor(Math.random() * R_B.length)]}`;
+    if (!used.has(n)) return n;
+  }
+  return `도깨비 마을 ${Math.floor(Math.random() * 900) + 100}`;
+}
+
 export const EMOTES = [
   { k: 'here', icon: '📍', text: '여기로 와!' },
   { k: 'help', icon: '🆘', text: '도와줘!' },

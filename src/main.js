@@ -17,7 +17,7 @@ import { XP, xpNeed, rollPerks, PERKS } from './perks.js';
 import { Meta, MONSTER_INFO, ACHIEVEMENTS, GIFTS, OUTFITS, UPGRADES, upgradeCost, runCoins } from './meta.js';
 import { Dog } from './pet.js';
 import { setupInstall } from './install.js';
-import { Net, listRooms, createRoom, myNick, setNick, randomNick, EMOTES, SERVER as SERVER_URL } from './net.js';
+import { Net, listRooms, createRoom, myNick, setNick, randomNick, EMOTES, SERVER as SERVER_URL, roomName } from './net.js';
 import { Friends } from './together.js';
 import { Fox } from './beasts.js';
 import { difficulty } from './config.js';
@@ -464,14 +464,17 @@ async function showRooms(tab = mpTab) {
     refresh.onclick = () => showRooms('list');
     body.appendChild(refresh);
   } else if (tab === 'create') {
+    let taken = [];
+    let name = roomName();
     body.innerHTML = `<div class="mp-form">
-      <label>방 이름 <input type="text" id="mp-name" maxlength="12" value="${myNick()}의 방"></label>
+      <label>방 이름 <span class="room-name"><b id="mp-name">${name}</b> <button class="chip-btn" id="mp-name-re">🔄</button></span></label>
       <label>비밀번호 <input type="tel" id="mp-pw" maxlength="6" placeholder="없음"></label>
       <button class="primary" id="mp-make">방 만들기</button></div>`;
+    listRooms().then((rs) => { taken = rs.map((r) => r.name); if (taken.includes(name)) { name = roomName(taken); $('mp-name').textContent = name; } }).catch(() => {});
+    $('mp-name-re').onclick = () => { name = roomName([...taken, name]); $('mp-name').textContent = name; };
     $('mp-make').onclick = async () => {
       const pw = $('mp-pw').value.replace(/\D/g, '');
       if (pw && pw.length < 4) { mpMsg('비밀번호는 숫자 4자리 이상'); return; }
-      const name = $('mp-name').value.replace(/[^\p{L}\p{N} ]/gu, '').trim().slice(0, 12) || `${myNick()}의 방`;
       mpMsg('만드는 중…');
       try { await tryJoin(await createRoom(name, pw), pw); } catch (err) { mpMsg(err.message || '방을 만들지 못했어요'); }
     };
@@ -740,11 +743,12 @@ function setPaused(p) {
   const ri = document.getElementById('room-info');
   if (ri) {
     ri.hidden = !mp;
-    if (mp) ri.innerHTML = `👫 <b>${mp.room.name || '같이 하기'}</b><br>방 번호 <b>${mp.code}</b>${mp.pw ? ` · 비밀번호 <b>${mp.pw}</b>` : ' · 비밀번호 없음'}<br>함께: ${[myNick(), ...friends.list.map((f) => f.name)].join(', ')}<br><small>"처음으로"를 누르면 방에서 나가요 (내 가방은 저장돼요)</small>`;
+    if (mp) ri.innerHTML = `👫 <b>${mp.room.name || '같이 하기'}</b><br>방 번호 <b>${mp.code}</b>${mp.pw ? ` · 비밀번호 <b>${mp.pw}</b>` : ' · 비밀번호 없음'}<br>함께: ${[myNick(), ...friends.list.map((f) => f.name)].join(', ')}`;
   }
   if (p && state === 'playing') saveGame();
   state = p ? 'paused' : 'playing';
   $('pause-screen').hidden = !p;
+  $('quit-btn').textContent = mp ? '🚪 방 나가기' : '🏠 그만하기 (저장됨)';
   input.clear();
 }
 
@@ -899,6 +903,17 @@ $('quit-btn').onclick = () => {
   hud.show(false);
   showControls(false);
 };
+// on ttuk.pages.dev the game sits in /dokkaebi/: show the way back to the game list
+if (/\/dokkaebi\/?$/.test(location.pathname)) $('home-link').hidden = false;
+// phone back button: playing → pause menu, pause menu → back to the game; on the title it leaves as usual
+history.replaceState({ g: 0 }, '');
+history.pushState({ g: 1 }, '');
+addEventListener('popstate', () => {
+  if (state === 'playing') { setPaused(true); history.pushState({ g: 1 }, ''); }
+  else if (state === 'paused') { setPaused(false); history.pushState({ g: 1 }, ''); }
+  else if (!$('mp-screen').hidden || !$('meta-screen').hidden) { $('mp-screen').hidden = true; $('meta-screen').hidden = true; history.pushState({ g: 1 }, ''); }
+  else history.back();
+});
 if (params.get('nopause') !== '1') {
   document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'playing') setPaused(true); });
 }

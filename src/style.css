@@ -625,4 +625,6 @@ html, body {
 #emote-menu button { height: 52px; border-radius: 12px; border: 0; background: rgba(255,255,255,.08); color: var(--ink); font-family: inherit; font-size: 11px; font-weight: 800; display: grid; place-items: center; }
 #emote-menu button span { font-size: 20px; }
 
-.mp-form input[type=text] { letter-spacing: 0; font-size: 15px; }
+.mp-form .room-name { display: flex; align-items: center; gap: 6px; font-size: 15px; color: var(--gold, #ffd27a); }
+.home-link { display: block; margin-top: 10px; text-align: center; font-size: 13px; color: var(--ink-dim); text-decoration: none; }
+.home-link[hidden] { display: none; }
