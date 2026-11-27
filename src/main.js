@@ -588,6 +588,7 @@ showGifts();
 player.setOutfit(meta.outfits().includes(meta.outfit) ? meta.outfit : 'basic');
 
 function startGame(save = null) {
+  setTimeout(backGuard, 0);
   if (save instanceof Event) save = null;
   unlock();
   player.reset();
@@ -905,14 +906,18 @@ $('quit-btn').onclick = () => {
 };
 // on ttuk.pages.dev the game sits in /dokkaebi/: show the way back to the game list
 if (/\/dokkaebi\/?$/.test(location.pathname)) $('home-link').hidden = false;
-// phone back button: playing → pause menu, pause menu → back to the game; on the title it leaves as usual
-history.replaceState({ g: 0 }, '');
-history.pushState({ g: 1 }, '');
+// phone back button: playing → pause menu, pause menu → back to the game; on the title it leaves as usual.
+// Browsers skip history entries made without a tap, so the guard entry is (re)made on a tap while in the game.
+function backGuard() { if (state !== 'title' && !(history.state && history.state.g === 1)) history.pushState({ g: 1 }, ''); }
+document.addEventListener('pointerdown', backGuard, true);
 addEventListener('popstate', () => {
-  if (state === 'playing') { setPaused(true); history.pushState({ g: 1 }, ''); }
-  else if (state === 'paused') { setPaused(false); history.pushState({ g: 1 }, ''); }
-  else if (!$('mp-screen').hidden || !$('meta-screen').hidden) { $('mp-screen').hidden = true; $('meta-screen').hidden = true; history.pushState({ g: 1 }, ''); }
-  else history.back();
+  if (state === 'title') {
+    if (!$('mp-screen').hidden || !$('meta-screen').hidden) { $('mp-screen').hidden = true; $('meta-screen').hidden = true; }
+    return;
+  }
+  if (state === 'playing') setPaused(true);
+  else if (state === 'paused') setPaused(false);
+  history.pushState({ g: 1 }, '');
 });
 if (params.get('nopause') !== '1') {
   document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'playing') setPaused(true); });

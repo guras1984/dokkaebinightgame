@@ -328,7 +328,7 @@ html, body {
 
 /* ---------- Screens ---------- */
 .screen {
-  position: absolute; inset: 0; display: grid; place-items: center; padding: 16px;
+  position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; z-index: 9;
   background: radial-gradient(ellipse at 50% 40%, rgba(13,20,48,.35), rgba(5,8,20,.8));
 }
 #title-screen { background: radial-gradient(ellipse at 50% 30%, rgba(13,20,48,.15), rgba(5,8,20,.75)); }
