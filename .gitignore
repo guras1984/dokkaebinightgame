@@ -6,3 +6,4 @@ ios/App/App/public
 .wrangler
 server/.wrangler
 server/node_modules
+site

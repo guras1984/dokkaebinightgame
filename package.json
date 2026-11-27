@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "site": "vite build && node scripts/build-site.mjs",
+    "deploy": "npm run site && npx wrangler pages deploy site --project-name ttuk --branch main --commit-dirty=true"
   },
   "keywords": [],
   "author": "",
@@ -18,7 +20,9 @@
   "devDependencies": {
     "@capacitor/cli": "^8.6.3",
     "@capacitor/ios": "^8.6.3",
-    "vite": "^8.3.8"
+    "@cloudflare/vite-plugin": "^1.70.2",
+    "vite": "^8.3.8",
+    "wrangler": "^4.168.0"
   },
   "private": true
 }

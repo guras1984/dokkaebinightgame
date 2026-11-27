@@ -1,0 +1,15 @@
+{
+  "name": "도깨비 밤",
+  "short_name": "도깨비 밤",
+  "description": "한국 설화 생존 모험: 백 일 밤을 버텨라",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#0d1430",
+  "theme_color": "#0d1430",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

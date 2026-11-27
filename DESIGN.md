@@ -89,3 +89,10 @@
 4. **앱 (2026-11-27 수정)**: 스토어 등록 안 함. 안드로이드·아이폰 모두 **웹 앱(PWA)으로 "홈 화면에 설치"** 하게 안내 (안드로이드 크롬은 "앱 설치" 버튼, 아이폰은 Safari 공유 → 홈 화면에 추가). 설치 파일(APK)을 웹에서 내려받게 하는 방식은 경고 화면, 구글의 개발자 인증 강화(2026~2027 단계적)로 막힐 수 있어 쓰지 않음. 유명해지면 그때 구글 플레이 등록 검토
    - 할 일: 게임 안에 "앱으로 설치" 버튼/안내, (선택) 인터넷 없이도 켜지게 오프라인 저장
 5. 선택: 나만의 주소(도메인, 연 1~2만 원)로 게임·서버 주소 정리
+
+## 주소 (2026-11-27)
+- 입구(게임 모음): https://ttuk.pages.dev/ — `portal/`
+- 도깨비 밤: https://ttuk.pages.dev/dokkaebi/
+- 배포: `npm run site` 후 `wrangler pages deploy site --project-name ttuk --branch main` (Cloudflare Pages, 무료)
+- 예전 주소(guras1984.github.io/dokkaebinightgame)는 새 주소로 자동 이동만 함
+- 새 게임은 `site/<게임이름>/` 폴더로 추가하고 입구에 카드 하나 추가
