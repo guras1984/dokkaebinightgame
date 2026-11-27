@@ -51,6 +51,10 @@ let tonight = 'normal';
 const torchLight = new THREE.PointLight(0xffb050, 0, 9, 1.5);
 scene.add(torchLight);
 let torchFlame = null;
+// 여의주 that orbits the player after beating the 이무기
+const pearl = new THREE.Mesh(new THREE.IcosahedronGeometry(0.16, 1), new THREE.MeshBasicMaterial({ color: 0xe8f6ff }));
+pearl.visible = false;
+scene.add(pearl);
 const monsters = new Monsters(scene, effects);
 const daynight = new DayNight(scene, renderer);
 const hud = new Hud(input);
@@ -114,7 +118,7 @@ function readSave() {
 function saveGame() {
   store.set(SAVE_KEY, JSON.stringify({
     v: 1, day, mode, seed: world.seed, explored: minimap.serialize(), inv: player.inv, ironAxe: player.ironAxe, axeLevel: player.axeLevel, armor: player.armor, hp: Math.round(player.hp),
-    villagers: village.inCamp.map((p) => p.def.id), level: player.level, xp: player.xp, perks: player.perks || [], weapons: player.weapons, weapon: player.weapon, sandals: !!player.sandals, rod: !!player.rod,
+    villagers: village.inCamp.map((p) => p.def.id), level: player.level, xp: player.xp, perks: player.perks || [], pearls: player.pearls || 0, weapons: player.weapons, weapon: player.weapon, sandals: !!player.sandals, rod: !!player.rod,
     water: Math.round(player.water), food: Math.round(player.food),
     fireLv: world.fire.level, fuel: Math.round(world.fire.fuel), stats: player.stats, camp: camp.serialize(),
   }));
@@ -202,6 +206,7 @@ function startGame(save = null) {
   player.reset();
   player.setOutfit(meta.outfits().includes(meta.outfit) ? meta.outfit : 'basic');
   player.perks = [];
+  player.pearls = 0;
   pendingLevels = 0;
   monsters.reset();
   camp.reset();
@@ -243,6 +248,8 @@ function startGame(save = null) {
     player.sandals = !!save.sandals; player.rod = !!save.rod;
     player.level = save.level || 1; player.xp = save.xp || 0; player.perks = save.perks || [];
     for (const id of player.perks) { const pk = PERKS.find((q) => q.id === id); if (pk) pk.apply(player.mods); }
+    player.pearls = save.pearls || 0;
+    player.mods.dmg += player.pearls * 0.25;
     village.restore(save.villagers || [], world.fire);
     player.hp = save.hp; player.water = save.water; player.food = save.food;
     Object.assign(player.stats, save.stats);
@@ -674,6 +681,15 @@ function onMonsterKilled(m, by) {
     gain('herb', 2, { x: m.pos.x, y: 1.5, z: m.pos.z }, 700);
     monsters.banishNear(m.pos.x, m.pos.z, 12); // the rest of the night is calmer
   }
+  if (m.type === 'imugi' || m.type === 'dragon') {
+    // 여의주: a glowing pearl that circles you; +25% damage for the rest of the run
+    player.mods.dmg += 0.25;
+    player.pearls = (player.pearls || 0) + 1;
+    hud.banner(m.type === 'dragon' ? '용을 물리쳤다!' : '이무기를 물리쳤다!', '여의주를 얻었다! 모든 피해 +25%', 3.4);
+    sfx('dawn'); camera.shake = 1.6; hitStop = 0.3;
+    monsters.banishNear(m.pos.x, m.pos.z, 30);
+    if (m.type === 'dragon') setTimeout(() => { if (state === 'playing') endGame(true); }, 3500);
+  }
   gain('bead', Math.round(m.T.beads * (m.beadMul || 1)), { x: m.pos.x, y: 1.2, z: m.pos.z }, 200);
 }
 
@@ -960,6 +976,13 @@ function currentGoal(phase, inLight, fireR) {
   return { text: '장작을 넉넉히 모아 밤 준비하기 (만들기도 해 보자)', target: null };
 }
 
+function updatePearl(time) {
+  pearl.visible = (player.pearls || 0) > 0 && state === 'playing';
+  if (!pearl.visible) return;
+  pearl.position.set(player.pos.x + Math.sin(time * 2.4) * 0.9, 1.7 + Math.sin(time * 3) * 0.15, player.pos.z + Math.cos(time * 2.4) * 0.9);
+  pearl.material.color.setHSL(0.55 + Math.sin(time) * 0.05, 0.6, 0.85);
+}
+
 function updateTorch(time, darkness) {
   if (!torchFlame) {
     // flame on a stick in the free (left) hand
@@ -1147,6 +1170,7 @@ function tick(dt) {
     if (player.torchT === 0) { hud.toast('횃불이 다 탔다', 1.6); sfx('fireOut'); }
   }
   updateTorch(nowS, darkness);
+  updatePearl(nowS);
   const c = ctx();
 
   const beat = (key, text, secs) => { if (!announced[key]) { announced[key] = true; hud.toast(text, secs); } };
@@ -1248,7 +1272,8 @@ function tick(dt) {
       // the scary card: black flash, flickering red title, an omen, a cackle in the dark
       const ev = NIGHTS[tonight];
       const omen = bossNight ? '대장이 깨어났다. 오늘 밤은 다르다' : tonight !== 'normal' ? ev.desc : OMENS[(day * 7) % OMENS.length];
-      hud.nightIntro(bossNight ? '대장의 밤' : tonight !== 'normal' ? ev.name : '밤이 왔다', `${day}일째 밤 · ${omen}`, bossNight || tonight === 'bloodmoon', EASY());
+      const bossTitle = day >= rules.totalNights ? '용의 밤' : day % 10 === 0 ? '이무기의 밤' : '대장의 밤';
+      hud.nightIntro(bossNight ? bossTitle : tonight !== 'normal' ? ev.name : '밤이 왔다', `${day}일째 밤 · ${omen}`, bossNight || tonight === 'bloodmoon', EASY());
       if (EASY()) sfx('gong');
       else { sfx('dread'); sfx('laugh', 0.9, 0.85); sfx('laugh', 1.6, 1.15); }
       camera.shake = Math.max(camera.shake, 0.5);
@@ -1271,9 +1296,11 @@ function tick(dt) {
     }
     if (bossNight && nightP > rules.bossAt && !announced.boss) {
       announced.boss = true;
-      monsters.spawnBoss(c, day);
+      const bm = monsters.spawnBoss(c, day);
       sfx('raid'); sfx('gong');
-      hud.banner('도깨비 대장이 나타났다!', '불빛에 숨어 있으면 대장이 불을 흔든다', 3, 'raid');
+      if (bm.type === 'imugi') hud.banner('이무기가 솟아올랐다!', '붉은 원이 생기면 그 자리를 피하라. 땅속에 있을 땐 못 때린다', 3.4, 'raid');
+      else if (bm.type === 'dragon') hud.banner('용이 하늘에 올랐다!', '붉은 줄이 보이면 옆으로 피하라. 마지막 밤이다!', 3.4, 'raid');
+      else hud.banner('도깨비 대장이 나타났다!', '불빛에 숨어 있으면 대장이 불을 흔든다', 3, 'raid');
       camera.shake = 1.2;
     }
     if (!bossNight && tonight !== 'horde' && nightP > rules.raidAt && !announced.raid) {

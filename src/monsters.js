@@ -398,7 +398,7 @@ export class Monsters {
   /** small health bar over a monster for a few seconds after it gets hit (the chief uses the HUD bar) */
   updateBars(dt, camera) {
     for (const m of this.list) {
-      const show = m.alive && m.type !== 'boss' && (m.hurtShow || 0) > 0;
+      const show = m.alive && m !== this.boss && (m.hurtShow || 0) > 0;
       m.hurtShow = Math.max(0, (m.hurtShow || 0) - dt);
       if (!show) { if (m.bar) m.bar.visible = false; continue; }
       if (!m.bar) {
@@ -449,7 +449,8 @@ export class Monsters {
   }
 
   spawnBoss(ctx, night) {
-    const m = this.spawn(ctx, difficulty(night), 'boss');
+    const type = night >= rules.totalNights ? 'dragon' : night % 10 === 0 ? 'imugi' : 'boss';
+    const m = this.spawn(ctx, difficulty(night), type);
     this.boss = m;
     return m;
   }

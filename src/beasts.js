@@ -362,8 +362,150 @@ export class Shadow extends Beast {
 }
 
 export function makeBeast(scene, type, x, z, diff) {
+  if (type === 'imugi') return new Serpent(scene, x, z, diff, false);
+  if (type === 'dragon') return new Serpent(scene, x, z, diff, true);
   if (type === 'fox') return new Fox(scene, x, z, diff);
   if (type === 'centipede') return new Centipede(scene, x, z, diff);
   if (type === 'bulgasari') return new Bulgasari(scene, x, z, diff);
   return new Shadow(scene, x, z, diff);
+}
+
+// 이무기 (and on night 100, the 용): a giant serpent boss.
+// 이무기: dives underground and bursts up under you (red circle), lashes with its tail.
+// 용: flies, breathes a line of fire (red stripe on the ground first).
+BEAST_TYPES.imugi = { name: '이무기', hp: 600, damage: 30, speed: 3.4, radius: 1.0, beads: 15, scale: 1 };
+BEAST_TYPES.dragon = { name: '용', hp: 1500, damage: 28, speed: 4.2, radius: 1.1, beads: 40, scale: 1 };
+const ringGeo2 = new THREE.RingGeometry(0.75, 1, 40);
+
+export class Serpent extends Beast {
+  constructor(scene, x, z, diff, dragon = false) {
+    super(scene, dragon ? 'dragon' : 'imugi', x, z, diff);
+    this.dragon = dragon;
+    this.hp = Math.round(this.T.hp + diff.n * (dragon ? 10 : 20));
+    this.maxHp = this.hp;
+    const skin = this.M(dragon ? 0xd9a020 : 0x2f5a4a), belly = this.M(dragon ? 0xfff0a0 : 0xd9c78a), dark = this.M(0x1a2a22);
+    this.headG = new THREE.Group(); this.root.add(this.headG);
+    this.box(1.1, 0.8, 1.4, skin, 0, 0.6, 0, this.headG);
+    this.box(0.9, 0.3, 0.8, belly, 0, 0.3, 0.55, this.headG);
+    for (const s of [-1, 1]) {
+      this.box(0.14, 0.1, 0.04, this.M(0xff3b2a), s * 0.32, 0.88, 0.71, this.headG);
+      const wh = this.box(0.05, 0.05, 1.0, belly, s * 0.45, 0.45, 0.9, this.headG); wh.rotation.y = s * 0.4; // whiskers
+      if (dragon) { const h = this.box(0.12, 0.6, 0.12, this.M(0xfff4e0), s * 0.3, 1.25, -0.2, this.headG); h.rotation.x = -0.5; }
+    }
+    this.segs = [];
+    this.trail = [];
+    for (let i = 0; i < 16; i++) {
+      const g = new THREE.Group();
+      const k = 1 - i / 22;
+      this.box(0.95 * k, 0.75 * k, 0.9, i % 3 === 0 ? dark : skin, 0, 0.45, 0, g);
+      this.box(0.7 * k, 0.2, 0.9, belly, 0, 0.12, 0, g);
+      if (dragon && (i === 3 || i === 4)) for (const s of [-1, 1]) { const w = this.box(1.8, 0.06, 0.9, this.M(0xf1c24b, { transparent: true, opacity: 0.85 }), s * 1.1, 0.7, 0, g); w.rotation.z = s * 0.3; }
+      g.position.copy(this.pos);
+      scene.add(g);
+      this.segs.push(g);
+    }
+    this.warn = new THREE.Mesh(ringGeo2, new THREE.MeshBasicMaterial({ color: 0xff3b2a, transparent: true, opacity: 0, depthWrite: false }));
+    this.warn.rotation.x = -Math.PI / 2; this.warn.position.y = 0.05;
+    scene.add(this.warn);
+    this.line = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 10), new THREE.MeshBasicMaterial({ color: 0xff5a1a, transparent: true, opacity: 0, depthWrite: false }));
+    this.line.rotation.x = -Math.PI / 2; this.line.position.y = 0.06;
+    scene.add(this.line);
+    this.extra = [...this.segs, this.warn, this.line];
+    this.attackCD = 3;
+    this.whipCD = 0;
+    this.y = 0;
+    this.target = new THREE.Vector3();
+  }
+  hit(dmg, fromX, fromZ, kb) {
+    if (this.state === 'under') return false; // can't hit it underground
+    return super.hit(dmg, fromX, fromZ, (kb || 1) * 0.15);
+  }
+  update(dt, ctx) {
+    this.time += dt; this.t += dt;
+    const busy = this.lifecycle(dt, ctx.effects, this.dragon ? 0xffd23a : 0x6fd0a0);
+    this.segs.forEach((s) => s.scale.setScalar(this.root.scale.x));
+    if (busy) { this.warn.material.opacity = 0; this.line.material.opacity = 0; return null; }
+    const { player, zones } = ctx;
+    const dx = player.pos.x - this.pos.x, dz = player.pos.z - this.pos.z, dist = Math.hypot(dx, dz);
+    const safe = zoneAt(zones, player.pos);
+    let event = null;
+    this.attackCD -= dt; this.whipCD -= dt;
+    this.warn.material.opacity = 0; this.line.material.opacity = 0;
+    let goal = null, speed = this.T.speed;
+    if (this.state === 'chase') {
+      // circle the player at a distance, closing in
+      const a = Math.atan2(this.pos.x - player.pos.x, this.pos.z - player.pos.z) + 0.6;
+      const r = safe ? safe.r + 2.5 : 5;
+      const c = safe || player.pos;
+      goal = new THREE.Vector3(c.x + Math.sin(a) * r, 0, c.z + Math.cos(a) * r);
+      if (this.attackCD <= 0 && !player.dead) {
+        this.state = this.dragon ? 'breath' : 'dive'; this.t = 0; event = 'windup';
+        // where the attack lands: on the player, or at the edge of the light they hide in
+        if (safe) { const aa = Math.atan2(player.pos.x - safe.x, player.pos.z - safe.z); this.target.set(safe.x + Math.sin(aa) * (safe.r + 0.5), 0, safe.z + Math.cos(aa) * (safe.r + 0.5)); }
+        else this.target.set(player.pos.x, 0, player.pos.z);
+        this.fireHit = !!safe;
+      }
+      // tail whip when you are close to its body
+      if (this.whipCD <= 0 && this.segs.slice(4).some((s) => Math.hypot(s.position.x - player.pos.x, s.position.z - player.pos.z) < 1.4) && !player.rolling) {
+        this.whipCD = 2.5; event = 'hitPlayer'; this.damage = 18;
+      }
+      this.move(dt, goal, speed, ctx);
+    } else if (this.state === 'dive') {
+      this.y = -Math.min(1, this.t / 1.0) * 2.2;
+      this.vel.multiplyScalar(0.9);
+      if (this.t > 1.0) { this.state = 'under'; this.t = 0; }
+    } else if (this.state === 'under') {
+      // hidden: slide to the target; a red circle grows where it will burst out
+      const tx = this.target.x - this.pos.x, tz = this.target.z - this.pos.z, td = Math.hypot(tx, tz);
+      if (td > 0.3) { this.pos.x += (tx / td) * Math.min(td, 14 * dt); this.pos.z += (tz / td) * Math.min(td, 14 * dt); }
+      if (!this.fireHit) this.target.lerp(new THREE.Vector3(player.pos.x, 0, player.pos.z), Math.min(1, dt * 0.8)); // tracks you a little
+      this.warn.position.set(this.target.x, 0.05, this.target.z);
+      this.warn.scale.setScalar(2.6 * (0.4 + Math.min(1, this.t / 1.4) * 0.6));
+      this.warn.material.opacity = 0.35 + Math.min(1, this.t / 1.4) * 0.5;
+      if (this.t > 1.4) {
+        this.state = 'burst'; this.t = 0;
+        this.pos.set(this.target.x, 0, this.target.z);
+        this.damage = this.T.damage;
+        if (this.fireHit) event = 'fireSlam';
+        else if (Math.hypot(player.pos.x - this.target.x, player.pos.z - this.target.z) < 2.6 && !player.rolling) event = 'hitPlayer';
+        else event = 'stomp';
+      }
+    } else if (this.state === 'burst') {
+      this.y = -2.2 + Math.min(1, this.t / 0.3) * 2.2 + Math.sin(Math.min(1, this.t / 0.6) * Math.PI) * 1.5;
+      if (this.t > 0.8) { this.state = 'chase'; this.t = 0; this.y = 0; this.attackCD = 4 + Math.random() * 2; }
+    } else if (this.state === 'breath') {
+      // dragon: aim, show the fire line, then breathe
+      this.facing += angDiff(this.facing, Math.atan2(this.target.x - this.pos.x, this.target.z - this.pos.z)) * Math.min(1, dt * 3);
+      this.root.rotation.y = this.facing;
+      const fx = Math.sin(this.facing), fz = Math.cos(this.facing);
+      this.line.position.set(this.pos.x + fx * 5.5, 0.06, this.pos.z + fz * 5.5);
+      this.line.rotation.z = -this.facing;
+      this.line.material.opacity = this.t < 1.0 ? 0.25 + this.t * 0.4 : 0.85;
+      if (this.t > 1.0 && !this.breathed) {
+        this.breathed = true;
+        for (let i = 1; i < 10; i++) ctx.effects.spawn(this.pos.x + fx * i, 1, this.pos.z + fz * i, 0xff7a1a, { n: 4, speed: 1.5, up: 2, life: 0.6, size: 0.2, grav: -1 });
+        const along = dx * fx + dz * fz, side = Math.abs(dx * fz - dz * fx);
+        this.damage = this.T.damage;
+        if (this.fireHit) event = 'fireSlam';
+        else if (along > 0 && along < 11 && side < 1.2 && !player.rolling) event = 'hitPlayer';
+      }
+      if (this.t > 1.5) { this.state = 'chase'; this.t = 0; this.breathed = false; this.attackCD = 3.5 + Math.random() * 2; }
+    }
+    this.root.position.y = this.dragon ? 2.2 + Math.sin(this.time * 2) * 0.4 : this.y;
+    // body follows the head
+    this.trail.unshift({ x: this.pos.x, z: this.pos.z, y: this.root.position.y });
+    if (this.trail.length > 260) this.trail.pop();
+    let acc = 0, ti = 0;
+    for (let i = 0; i < this.segs.length; i++) {
+      const want = 0.85 * (i + 1);
+      while (ti < this.trail.length - 1 && acc < want) { acc += Math.hypot(this.trail[ti + 1].x - this.trail[ti].x, this.trail[ti + 1].z - this.trail[ti].z) + 0.001; ti++; }
+      const p = this.trail[Math.min(ti, this.trail.length - 1)];
+      const s = this.segs[i];
+      const prev = i === 0 ? this.pos : this.segs[i - 1].position;
+      s.position.set(p.x, p.y + Math.sin(this.time * 4 - i * 0.5) * 0.12, p.z);
+      s.rotation.y = Math.atan2(prev.x - s.position.x, prev.z - s.position.z);
+    }
+    this.flashUpdate(dt);
+    return event;
+  }
 }

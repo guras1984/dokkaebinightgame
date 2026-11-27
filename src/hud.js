@@ -92,6 +92,7 @@ export class Hud {
     e.clock.classList.toggle('night', s.phase === 'night');
     const bb = $('boss-bar');
     if (bb.hidden === !!s.boss) bb.hidden = !s.boss;
+    if (s.boss && this.bossName !== s.boss.T.name) { this.bossName = s.boss.T.name || '도깨비 대장'; $('boss-name').textContent = this.bossName; }
     if (s.boss) $('boss-fill').style.width = `${Math.max(0, s.boss.hp / s.boss.maxHp) * 100}%`;
 
     if (s.actionLabel !== this.lastAction) {
