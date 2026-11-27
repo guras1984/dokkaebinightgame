@@ -3,6 +3,7 @@ import { tune, rules } from './config.js';
 import { buildCharacter, animateCharacter, flash } from './character.js';
 import { emptyInventory } from './items.js';
 import { WEAPONS } from './weapons.js';
+import { emptyMods } from './perks.js';
 
 const angDiff = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
 
@@ -19,6 +20,9 @@ export class Player {
     this.pos.set(0, 0, 2.4);
     this.vel.set(0, 0, 0);
     this.facing = Math.PI / 4;  // face the camera at the start
+    this.mods = emptyMods();
+    this.level = 1;
+    this.xp = 0;
     this.hp = rules.playerHp;
     this.inv = emptyInventory();
     this.water = 100;
@@ -116,6 +120,8 @@ export class Player {
     this.armorParts.forEach((p) => { p.visible = on; });
   }
 
+  get maxHp() { return rules.playerHp + this.mods.maxHp; }
+
   get wood() { return this.inv.wood; }
   set wood(v) { this.inv.wood = v; }
 
@@ -125,7 +131,7 @@ export class Player {
   startAttack(aimAngle) {
     if (this.attacking || this.rolling || this.dead) return false;
     this.attackT = 0;
-    this.atkTime = this.weapon === 'axe' ? tune.attackTime : WEAPONS[this.weapon].time;
+    this.atkTime = (this.weapon === 'axe' ? tune.attackTime : WEAPONS[this.weapon].time) / (1 + this.mods.atk);
     this.attackHit = false;
     if (aimAngle !== null && aimAngle !== undefined) this.facing = aimAngle;
     return true;
@@ -135,7 +141,7 @@ export class Player {
     if (this.dead) return false;
     if (this.rolling) {
       // buffer the press; the next roll starts the moment this one lands
-      if (this.rollT > 0.25 && this.rollChain < tune.rollChain) this.rollQueued = true;
+      if (this.rollT > 0.25 && this.rollChain < tune.rollChain + this.mods.roll) this.rollQueued = true;
       return false;
     }
     if (this.rollCool > 0) return false;
@@ -204,7 +210,7 @@ export class Player {
     } else {
       // slower while swinging so the chop feels planted
       const slow = this.attacking ? 0.35 : 1;
-      const target = new THREE.Vector3(wish.x, 0, wish.z).multiplyScalar(tune.moveSpeed * slow * (this.sandals ? 1.15 : 1));
+      const target = new THREE.Vector3(wish.x, 0, wish.z).multiplyScalar(tune.moveSpeed * slow * (this.sandals ? 1.15 : 1) * (1 + this.mods.speed));
       const rate = target.lengthSq() > this.vel.lengthSq() ? tune.accel : tune.decel;
       const diff = target.sub(this.vel);
       const step = rate * dt;

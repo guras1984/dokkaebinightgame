@@ -23,8 +23,9 @@
     <div id="hud" hidden>
       <div class="hud-left">
         <div class="hp">
-          <span class="hp-label">체력</span>
+          <span class="hp-label" id="lv-label">Lv 1</span>
           <div class="bar"><i id="hp-fill"></i></div>
+          <i class="xpline"><i id="xp-fill"></i></i>
         </div>
         <div class="needs">
           <div class="need" id="need-water"><span class="need-icon water"></span><div class="bar tiny"><i id="water-fill"></i></div></div>
@@ -122,6 +123,21 @@
         <button id="retry-btn" class="primary" hidden>아침부터 다시</button>
         <button id="again-btn" class="primary">다시 하기</button>
       </div>
+    </section>
+
+    <section id="summary" hidden>
+      <div class="panel">
+        <small class="eyebrow" id="sum-eyebrow">1일째 밤 결산</small>
+        <div class="stars" id="sum-stars">★★★</div>
+        <ul class="stats" id="sum-stats"></ul>
+        <p id="sum-reward"></p>
+        <button id="sum-btn" class="primary">아침 맞이하기</button>
+      </div>
+    </section>
+
+    <section id="levelup" hidden>
+      <div class="lu-head"><small>레벨 업!</small><b id="lu-title">Lv 2</b><span>하나를 골라 더 강해지자</span></div>
+      <div id="lu-cards"></div>
     </section>
 
     <div id="tune" hidden></div>

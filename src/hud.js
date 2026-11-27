@@ -61,6 +61,8 @@ export class Hud {
   update(s) {
     const e = this.el;
     e.hp.style.width = `${(s.hp / s.hpMax) * 100}%`;
+    if (this.lastLv !== s.level) { this.lastLv = s.level; $('lv-label').textContent = `Lv ${s.level}`; }
+    $('xp-fill').style.width = `${Math.min(100, (s.xp / s.xpNeed) * 100)}%`;
     $('water-fill').style.width = `${s.water}%`;
     $('food-fill').style.width = `${s.food}%`;
     $('need-water').classList.toggle('low', s.water < 25);
@@ -231,6 +233,22 @@ export class Hud {
     d.shown = Math.min(text.length, d.shown + dt * 38);
     $('dlg-text').textContent = text.slice(0, Math.floor(d.shown));
     if (d.shown >= text.length) d.typing = false;
+  }
+
+  /** three perk cards; calls pick(perk) */
+  levelUp(level, perks, pick) {
+    $('lu-title').textContent = `Lv ${level}`;
+    const box = $('lu-cards');
+    box.innerHTML = '';
+    for (const p of perks) {
+      const b = document.createElement('button');
+      b.className = 'lu-card';
+      b.innerHTML = `<span class="pic">${p.icon}</span><b>${p.name}</b><small>${p.desc}</small>`;
+      b.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); $('levelup').hidden = true; pick(p); });
+      box.appendChild(b);
+    }
+    $('levelup').hidden = false;
+    this.bump(document.querySelector('.hp'), 'lvup');
   }
 
   setNightGloom(v) { $('night-vignette').style.opacity = v.toFixed(3); }
