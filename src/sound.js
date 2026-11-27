@@ -158,6 +158,7 @@ const SFX = {
     tone({ type: 'sine', f: 880, f2: 840, t: 0.3, a: 0.8, dur: 1.8, vol: 0.03 });
     noise({ type: 'lowpass', f: 200, f2: 900, a: 0.6, dur: 2, vol: 0.25 });
   },
+  bark: () => { [0, 0.16].forEach((t) => { tone({ type: 'square', f: 420, f2: 260, t, a: 0.005, dur: 0.08, vol: 0.08 }); noise({ type: 'bandpass', f: 900, q: 2, t, dur: 0.06, vol: 0.15 }); }); },
   lose: () => { [0, -3, -7, -12].forEach((s, i) => tone({ type: 'triangle', f: 330 * Math.pow(2, s / 12), t: i * 0.22, dur: 0.5, vol: 0.15 })); },
 };
 

@@ -15,6 +15,7 @@ import { Minimap } from './minimap.js';
 import { NIGHTS, pickNight, Horde, Rain } from './events.js';
 import { XP, xpNeed, rollPerks, PERKS } from './perks.js';
 import { Meta, MONSTER_INFO, ACHIEVEMENTS, GIFTS, OUTFITS } from './meta.js';
+import { Dog } from './pet.js';
 import { PROLOGUE, campLine } from './story.js';
 import { WEAPONS, WEAPON_ORDER, CRIT_CHANCE, CRIT_MUL, weaponDmg, weaponChop } from './weapons.js';
 import { sfx, unlock, ambience, music, isMuted, setMuted, audioState } from './sound.js';
@@ -45,6 +46,7 @@ const village = new Village(scene, world, effects);
 village.relayout();
 const minimap = new Minimap();
 const horde = new Horde();
+const dog = new Dog(scene);
 const rain = new Rain(scene);
 let tonight = 'normal';
 // the torch: one light that follows the player (created up front so shaders don't recompile)
@@ -118,7 +120,7 @@ function readSave() {
 function saveGame() {
   store.set(SAVE_KEY, JSON.stringify({
     v: 1, day, mode, seed: world.seed, explored: minimap.serialize(), inv: player.inv, ironAxe: player.ironAxe, axeLevel: player.axeLevel, armor: player.armor, hp: Math.round(player.hp),
-    villagers: village.inCamp.map((p) => p.def.id), level: player.level, xp: player.xp, perks: player.perks || [], pearls: player.pearls || 0, weapons: player.weapons, weapon: player.weapon, sandals: !!player.sandals, rod: !!player.rod,
+    villagers: village.inCamp.map((p) => p.def.id), level: player.level, xp: player.xp, perks: player.perks || [], pearls: player.pearls || 0, dog: dog.tamed, weapons: player.weapons, weapon: player.weapon, sandals: !!player.sandals, rod: !!player.rod,
     water: Math.round(player.water), food: Math.round(player.food),
     fireLv: world.fire.level, fuel: Math.round(world.fire.fuel), stats: player.stats, camp: camp.serialize(),
   }));
@@ -220,6 +222,9 @@ function startGame(save = null) {
   horde.reset();
   tonight = pickNight(day);
   monsters.mod = null;
+  dog.reset();
+  if (save && save.dog) { dog.appear(player.pos.x - 1.5, player.pos.z - 1.5); dog.tame(); }
+  else if (day >= 2) strayDog();
   critters.reset();
   critters.repopulate(world, player.pos.x, player.pos.z);
   world.setFireLevel(0);
@@ -389,6 +394,8 @@ function newDay() {
   tonight = pickNight(day);
   monsters.mod = null;
   morningGifts();
+  if (!dog.tamed && day >= 2 && dog.state === 'gone') strayDog();
+  if (dog.tamed) { gain('rawmeat', 1, { x: dog.pos.x, y: 0.8, z: dog.pos.z }, 1800); setTimeout(() => hud.toast('백구가 토끼를 물어 왔다!', 2), 2400); }
   sfx('dawn');
   saveGame();
   const opened = Object.entries(REGIONS).find(([id, r]) => id !== 'home' && r.unlock === day);
@@ -420,6 +427,19 @@ function showSummary(night, last, done) {
     done();
   };
 }
+
+/** a stray 진돗개 waits somewhere in the home forest */
+function strayDog() {
+  for (let k = 0; k < 30; k++) {
+    const a = Math.random() * Math.PI * 2, r = 8 + Math.random() * 10;
+    const x = Math.sin(a) * r, z = Math.cos(a) * r;
+    if (world.colliders.some((c) => Math.hypot(c.x - x, c.z - z) < c.r + 1)) continue;
+    dog.appear(x, z);
+    return;
+  }
+}
+const DOG_FOOD = ['meat', 'fishc', 'fish', 'rawmeat', 'skewer'];
+const dogNear = () => dog.state === 'stray' && Math.hypot(dog.pos.x - player.pos.x, dog.pos.z - player.pos.z) < 1.9;
 
 /** villagers at the camp bring things each morning */
 function morningGifts() {
@@ -559,6 +579,16 @@ function tryAction() {
     const lines = npc.def.idle;
     npc.lastLine = ((npc.lastLine ?? Math.floor(Math.random() * lines.length)) + 1) % lines.length;
     talk([{ who: npc.def.name, role: npc.def.role, text: lines[npc.lastLine] }]);
+    return;
+  }
+  if (dogNear()) {
+    const food = DOG_FOOD.find((k) => player.inv[k] > 0);
+    if (!food) { hud.toast('배고픈 진돗개다. 고기나 물고기를 주자', 2); sfx('deny'); return; }
+    player.inv[food] -= 1;
+    dog.tame();
+    sfx('eat'); sfx('dawn');
+    effects.spawn(dog.pos.x, 1, dog.pos.z, 0xffb3c7, { n: 16, speed: 2, up: 4, life: 0.8, size: 0.12, grav: 3 });
+    hud.banner('진돗개 "백구"가 친구가 됐다!', '같이 싸우고, 아침마다 토끼를 물어 온다', 3);
     return;
   }
   const broken = camp.repairable(player.pos.x, player.pos.z);
@@ -1124,7 +1154,7 @@ function tick(dt) {
     sfx('build');
     hud.popup(WEAPONS[player.weapon].name, { x: player.pos.x, y: 2.7, z: player.pos.z }, camera.cam, 'wood big');
   }
-  const autoOk = !player.attacking && !player.rolling && !nearFire() && !chestNear() && !bushNear() && !rescuable() && !village.talkable(player.pos.x, player.pos.z) && !camp.repairable(player.pos.x, player.pos.z);
+  const autoOk = !dogNear() && !player.attacking && !player.rolling && !nearFire() && !chestNear() && !bushNear() && !rescuable() && !village.talkable(player.pos.x, player.pos.z) && !camp.repairable(player.pos.x, player.pos.z);
   if (input.consume('action') || (input.actionHeld && autoOk)) tryAction();
 
   if (player.fishT > 0) {
@@ -1191,6 +1221,11 @@ function tick(dt) {
   const events = monsters.update(dt, c, tonight === 'horde' ? -1 : nightP, day);
   for (const m of monsters.alive) if (!m.illusion && !dex[m.type] && Math.hypot(m.pos.x - player.pos.x, m.pos.z - player.pos.z) < 13) meet(m.type);
   updateVillage(dt, c, darkness);
+  for (const e of dog.update(dt, { player, world, monsters: monsters.alive, darkness })) {
+    if (e.type === 'bite') { damageMonster(e.m, 8, { fromX: dog.pos.x, fromZ: dog.pos.z, kb: 0.5, canCrit: false, by: '백구' }); }
+    else if (e.type === 'bark') { if (Math.random() < 0.6) sfx('bark'); }
+    else if (e.type === 'tired') hud.popup('헥헥…', { x: dog.pos.x, y: 1.6, z: dog.pos.z }, camera.cam, 'water big');
+  }
   for (const h of camp.springTraps(monsters.alive)) {
     effects.spawn(h.trap.x, 0.4, h.trap.z, 0xe8dcc0, { n: 10, speed: 3, up: 3, life: 0.4, size: 0.1 });
     damageMonster(h.m, 20, { fromX: h.trap.x, fromZ: h.trap.z, kb: 0.3, canCrit: false, by: '가시 덫' });
@@ -1367,7 +1402,7 @@ function tick(dt) {
     torch: player.torchT,
     weapon: player.weapon, weaponCount: player.weapons.length, arrows: player.inv.arrow || 0,
     weaponName: player.weapon === 'axe' ? ['돌도끼', '쇠도끼', '강철도끼'][player.axeLevel] : WEAPONS[player.weapon].name,
-    actionLabel: player.fishT > 0 ? '낚시 중' : chest ? '열기' : rescuable() ? '구하기' : (village.talkable(player.pos.x, player.pos.z) && !nearFire()) ? '말 걸기' : (camp.repairable(player.pos.x, player.pos.z) && !nearFire()) ? '고치기' : canFish() ? '낚시' : canDrink() ? '물 마시기' : bushNear() ? '따기' : nearFire() && player.wood > 0 ? '장작 넣기' : '베기',
+    actionLabel: player.fishT > 0 ? '낚시 중' : chest ? '열기' : dogNear() ? '먹이 주기' : rescuable() ? '구하기' : (village.talkable(player.pos.x, player.pos.z) && !nearFire()) ? '말 걸기' : (camp.repairable(player.pos.x, player.pos.z) && !nearFire()) ? '고치기' : canFish() ? '낚시' : canDrink() ? '물 마시기' : bushNear() ? '따기' : nearFire() && player.wood > 0 ? '장작 넣기' : '베기',
     water: player.water, food: player.food, level: player.level, xp: player.xp, xpNeed: xpNeed(player.level),
     boss: monsters.boss && monsters.boss.alive ? monsters.boss : null,
     rollCool: player.rollCool > 0 || player.rolling, canCraft,
@@ -1388,7 +1423,7 @@ requestAnimationFrame(frame);
 
 // debug handle for automated checks
 window.__game = {
-  get state() { return state; }, get day() { return day; }, critters, eyes, village, player, world, monsters, daynight, camera, input, tune, rules, camp, hud,
+  get state() { return state; }, get day() { return day; }, critters, eyes, village, dog, horde, meta, player, world, monsters, daynight, camera, input, tune, rules, camp, hud,
   start: startGame, setTime: (t) => { daynight.time = t; },
   /** advance the game n frames without waiting for the browser (used by automated checks) */
   step: (n = 1, dt = 1 / 60) => { for (let i = 0; i < n; i++) tick(dt); return window.__game.info(); },
