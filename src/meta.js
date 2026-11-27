@@ -66,3 +66,35 @@ export class Meta {
   setGift(id) { this.gift = id; save('dokkaebi.gift', id); }
   setOutfit(id) { this.outfit = id; save('dokkaebi.outfit', id); }
 }
+
+// ---------- 수련: permanent upgrades bought with 엽전 (coins earned every run) ----------
+export const UPGRADES = [
+  { id: 'hp', icon: '❤️', name: '튼튼한 몸', per: '기본 체력 +5', max: 10, base: 30 },
+  { id: 'dmg', icon: '💪', name: '단련된 팔', per: '공격력 +3%', max: 10, base: 40 },
+  { id: 'speed', icon: '👟', name: '가벼운 발', per: '이동 속도 +2%', max: 5, base: 40 },
+  { id: 'needs', icon: '🍙', name: '든든한 배', per: '배고픔·목마름 4% 천천히', max: 5, base: 30 },
+  { id: 'wood', icon: '🪵', name: '장작 준비', per: '시작 장작 +2', max: 5, base: 20 },
+  { id: 'fire', icon: '🔥', name: '큰 불씨', per: '모닥불 시작 불씨 +5', max: 5, base: 25 },
+  { id: 'torch', icon: '🔦', name: '횃불 챙기기', per: '시작 횃불 +1', max: 3, base: 30 },
+  { id: 'xp', icon: '📈', name: '빠른 깨달음', per: '경험치 +8%', max: 5, base: 35 },
+  { id: 'revive', icon: '✨', name: '다시 일어나기', per: '한 판에 한 번, 쓰러져도 체력 절반으로', max: 1, base: 200 },
+];
+export const upgradeCost = (u, lv) => Math.round(u.base * Math.pow(lv + 1, 1.5));
+/** coins for a finished run */
+export function runCoins({ nights, kills, rescued, bosses, hordes }) {
+  return Math.round(nights * 10 + kills * 1 + rescued * 15 + bosses * 30 + hordes * 20);
+}
+
+Meta.prototype.coins = function () { return this.life.coins || 0; };
+Meta.prototype.addCoins = function (n) { this.life.coins = (this.life.coins || 0) + n; save('dokkaebi.life', this.life); };
+Meta.prototype.lv = function (id) { return (load('dokkaebi.ups', {})[id]) || 0; };
+Meta.prototype.buy = function (id) {
+  const u = UPGRADES.find((q) => q.id === id);
+  const ups = load('dokkaebi.ups', {});
+  const lv = ups[id] || 0;
+  const cost = upgradeCost(u, lv);
+  if (lv >= u.max || this.coins() < cost) return false;
+  this.life.coins -= cost; save('dokkaebi.life', this.life);
+  ups[id] = lv + 1; save('dokkaebi.ups', ups);
+  return true;
+};

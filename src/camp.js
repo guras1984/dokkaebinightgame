@@ -13,7 +13,17 @@ export const STRUCT = {
   trap:      { name: '가시 덫', hp: 3, max: 8, pad: 0.3, repair: { stone: 1 } },
   hut:       { name: '초가집', hp: 200, max: 2, pad: 1.5, repair: { wood: 2 } },
   tower:     { name: '돌탑', hp: 80, max: 8, pad: 0.4, repair: { stone: 1 } },
+  wall:      { name: '돌담', hp: 220, max: 40, pad: 0.3, repair: { stone: 1 } },
+  gate:      { name: '성문', hp: 260, max: 6, pad: 0.3, repair: { stone: 1, wood: 1 } },
+  watch:     { name: '망루', hp: 200, max: 4, pad: 0.8, repair: { wood: 2 } },
 };
+/** 강화: wood → stone → iron (more health, different look) */
+export const TIERS = [
+  { name: '나무', mul: 1 },
+  { name: '돌', mul: 1.7, cost: { stone: 3 } },
+  { name: '쇠', mul: 2.6, cost: { stone: 4, bead: 2 } },
+];
+export const UPGRADABLE = ['fence', 'wall', 'gate', 'watch'];
 export class Camp {
   constructor(scene, world) {
     this.scene = scene;
@@ -160,7 +170,7 @@ export class Camp {
     const cols = [];
     const add = (geo, mat, px, py, pz) => { const o = new THREE.Mesh(geo, mat); o.position.set(px, py, pz); o.castShadow = true; g.add(o); return o; };
     const B = (w, h, d) => new THREE.BoxGeometry(w, h, d);
-    const st = { kind, x, z, f: facing, group: g, cols, hp: hp ?? D.hp, maxHp: D.hp, shake: 0, lit: 0, hurtShow: 0 };
+    const st = { kind, x, z, f: facing, group: g, cols, hp: hp ?? D.hp, maxHp: D.hp, shake: 0, lit: 0, hurtShow: 0, tier: 0 };
     if (kind === 'lantern') {
       add(B(0.7, 0.2, 0.7), m.stoneDark, 0, 0.1, 0);
       add(B(0.28, 0.7, 0.28), m.stone, 0, 0.55, 0);
@@ -225,6 +235,36 @@ export class Camp {
       st.lamp = add(B(0.4, 0.35, 0.05), m.lampOff, 0.5, 0.75, 0.92);
       st.zoneR = 2.8;
       cols.push({ x, z, r: 1.2 });
+    } else if (kind === 'wall' || kind === 'gate') {
+      // stone wall segment (gate: two doors that swing open for you)
+      g.rotation.y = facing;
+      const len = 1.6;
+      if (kind === 'wall') {
+        for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
+          add(B(0.52, 0.42, 0.5), (i + j) % 2 ? m.stone : m.stoneDark, -0.53 + j * 0.53, 0.21 + i * 0.42, (i % 2) * 0.03);
+        }
+        add(B(len + 0.06, 0.12, 0.6), m.stoneDark, 0, 1.32, 0);
+      } else {
+        for (const sx of [-0.72, 0.72]) add(B(0.28, 1.7, 0.5), m.stoneDark, sx, 0.85, 0);
+        add(B(len + 0.2, 0.22, 0.56), m.woodDark, 0, 1.72, 0);
+        st.doors = [-1, 1].map((sx) => {
+          const pivot = new THREE.Group(); pivot.position.set(sx * 0.58, 0, 0); g.add(pivot);
+          const d = new THREE.Mesh(B(0.58, 1.4, 0.12), m.wood); d.position.set(-sx * 0.29, 0.72, 0); d.castShadow = true; pivot.add(d);
+          return pivot;
+        });
+        st.open = 0;
+      }
+      const ax = Math.cos(facing), az = -Math.sin(facing);
+      for (const o of [-0.55, 0, 0.55]) cols.push({ x: x + ax * o, z: z + az * o, r: 0.34, gate: kind === 'gate' });
+    } else if (kind === 'watch') {
+      // watchtower: four legs, a platform, a roof; shoots arrows at night
+      for (const [lx, lz] of [[-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]]) add(B(0.16, 2.6, 0.16), m.fence, lx, 1.3, lz);
+      add(B(1.4, 0.16, 1.4), m.woodDark, 0, 2.6, 0);
+      for (const [rx, rz, rw, rd] of [[0, 0.66, 1.4, 0.08], [0, -0.66, 1.4, 0.08], [0.66, 0, 0.08, 1.4], [-0.66, 0, 0.08, 1.4]]) add(B(rw, 0.4, rd), m.fence, rx, 2.88, rz);
+      const roof = add(B(1.7, 0.14, 1.7), m.straw, 0, 3.6, 0); roof.rotation.y = Math.PI / 4;
+      add(B(0.1, 0.8, 0.1), m.fence, 0, 3.2, 0);
+      st.shootR = 10; st.shootT = 1;
+      cols.push({ x, z, r: 0.8 });
     } else if (kind === 'tower') {
       for (let k = 0; k < 5; k++) add(B(0.8 - k * 0.13, 0.24, 0.7 - k * 0.11), k % 2 ? m.stone : m.stoneDark, 0, 0.12 + k * 0.24, 0).rotation.y = k * 0.7 + facing;
       add(B(0.16, 0.16, 0.16), m.stone, 0, 1.32, 0);
@@ -245,6 +285,67 @@ export class Camp {
     this.structs.push(st);
     this.grow.push({ g, t: 0 });
     return st;
+  }
+
+  /** 강화: raise a building's tier (health up, colour changes) */
+  setTier(st, tier) {
+    st.tier = tier;
+    const base = STRUCT[st.kind].hp;
+    const k = st.hp / st.maxHp;
+    st.maxHp = Math.round(base * TIERS[tier].mul);
+    st.hp = Math.round(st.maxHp * (isFinite(k) ? k : 1));
+    const tint = [null, 0xa8a8b0, 0x5a6270][tier];
+    if (tint) st.group.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); o.material.color.lerp(new THREE.Color(tint), 0.65); } });
+    if (tier === 2) {
+      // iron studs
+      const stud = new THREE.MeshLambertMaterial({ color: 0x2a2c33, flatShading: true });
+      for (const sx of [-0.5, 0, 0.5]) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.62), stud); b.position.set(sx, 0.9, 0); st.group.add(b); }
+    }
+  }
+
+  /** a building you can 강화 (full health, below iron) near (x,z) */
+  upgradable(x, z) {
+    let best = null, bd = 99;
+    for (const s of this.structs) {
+      if (!UPGRADABLE.includes(s.kind) || s.tier >= 2 || s.hp < s.maxHp) continue;
+      const d = Math.hypot(s.x - x, s.z - z) - s.colR;
+      if (d < 1.0 && d < bd) { bd = d; best = s; }
+    }
+    return best;
+  }
+
+  /** gates swing open for the player (their colliders switch off) */
+  updateGates(dt, playerPos) {
+    for (const s of this.structs) {
+      if (s.kind !== 'gate') continue;
+      const near = Math.hypot(s.x - playerPos.x, s.z - playerPos.z) < 2.0;
+      s.open += ((near ? 1 : 0) - s.open) * Math.min(1, dt * 6);
+      s.doors[0].rotation.y = -s.open * 1.4; s.doors[1].rotation.y = s.open * 1.4;
+      const wantCols = !near;
+      if (wantCols !== s.colsOn) {
+        s.colsOn = wantCols;
+        for (const c of s.cols) {
+          if (c === s.cols[0] || c === s.cols[2]) continue; // posts stay solid
+          const i = this.world.colliders.indexOf(c);
+          if (wantCols && i < 0) this.world.colliders.push(c);
+          if (!wantCols && i >= 0) this.world.colliders.splice(i, 1);
+        }
+      }
+    }
+  }
+
+  /** watchtowers shoot the nearest monster in range: returns targets */
+  towerShots(dt, monsters, night) {
+    const out = [];
+    for (const s of this.structs) {
+      if (s.kind !== 'watch' || !night) continue;
+      s.shootT -= dt;
+      if (s.shootT > 0) continue;
+      let best = null, bd = s.shootR;
+      for (const m of monsters) { if (!m.alive || m.illusion) continue; const d = Math.hypot(m.pos.x - s.x, m.pos.z - s.z); if (d < bd) { bd = d; best = m; } }
+      if (best) { s.shootT = 1.8 - s.tier * 0.4; out.push({ tower: s, m: best }); }
+    }
+    return out;
   }
 
   /** a monster (or the chief) hits a building. returns true if it broke */
@@ -285,11 +386,14 @@ export class Camp {
   }
 
   serialize() {
-    return { structs: this.structs.map((s) => ({ k: s.kind, x: +s.x.toFixed(2), z: +s.z.toFixed(2), f: +(s.f || 0).toFixed(3), hp: Math.round(s.hp) })) };
+    return { structs: this.structs.map((s) => ({ k: s.kind, x: +s.x.toFixed(2), z: +s.z.toFixed(2), f: +(s.f || 0).toFixed(3), hp: Math.round(s.hp), t: s.tier || 0 })) };
   }
 
   restore(data) {
-    if (data.structs) { for (const s of data.structs) this.build(s.k, s.x, s.z, s.f, s.hp); return; }
+    if (data.structs) {
+      for (const s of data.structs) { if (!STRUCT[s.k]) continue; const st = this.build(s.k, s.x, s.z, s.f, null); this.setTier(st, s.t || 0); st.hp = Math.min(st.maxHp, s.hp); }
+      return;
+    }
     // older saves
     for (const l of data.lanterns || []) this.build('lantern', l.x, l.z, 0);
     for (const w of data.wells || []) this.build('well', w.x, w.z, 0);

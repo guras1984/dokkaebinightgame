@@ -7,14 +7,14 @@ import { Monsters } from './monsters.js';
 import { DayNight } from './daynight.js';
 import { QuarterCamera } from './camera.js';
 import { Effects } from './effects.js';
-import { Camp, STRUCT } from './camp.js';
+import { Camp, STRUCT, TIERS } from './camp.js';
 import { Critters } from './critters.js';
 import { Eyes } from './spooky.js';
 import { Village } from './villagers.js';
 import { Minimap } from './minimap.js';
 import { NIGHTS, pickNight, Horde, Rain } from './events.js';
 import { XP, xpNeed, rollPerks, PERKS } from './perks.js';
-import { Meta, MONSTER_INFO, ACHIEVEMENTS, GIFTS, OUTFITS } from './meta.js';
+import { Meta, MONSTER_INFO, ACHIEVEMENTS, GIFTS, OUTFITS, UPGRADES, upgradeCost, runCoins } from './meta.js';
 import { Dog } from './pet.js';
 import { PROLOGUE, campLine } from './story.js';
 import { WEAPONS, WEAPON_ORDER, CRIT_CHANCE, CRIT_MUL, weaponDmg, weaponChop } from './weapons.js';
@@ -28,9 +28,17 @@ const $ = (id) => document.getElementById(id);
 
 // ---------- renderer & scene ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+// graphics: 'normal' or 'low' (low = sharper on old phones: fewer pixels, no shadows)
+let gfx = (() => { try { return localStorage.getItem('dokkaebi.gfx') || 'normal'; } catch { return 'normal'; } })();
+function applyGfx() {
+  renderer.setPixelRatio(gfx === 'low' ? Math.min(devicePixelRatio, 1) * 0.85 : Math.min(devicePixelRatio, 2));
+  if (typeof daynight !== 'undefined') daynight.sun.castShadow = gfx !== 'low';
+  renderer.setSize(innerWidth, innerHeight);
+  const b = document.getElementById('gfx-btn');
+  if (b) b.textContent = `그래픽: ${gfx === 'low' ? '낮음 (빠르게)' : '보통'}`;
+}
 $('view').appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 
@@ -66,6 +74,20 @@ const blast = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 64), new THREE.MeshB
 blast.rotation.x = -Math.PI / 2; blast.position.y = 0.06;
 scene.add(blast);
 let blastT = -1;
+
+applyGfx();
+document.getElementById('gfx-btn').onclick = () => {
+  gfx = gfx === 'low' ? 'normal' : 'low';
+  try { localStorage.setItem('dokkaebi.gfx', gfx); } catch { /* ignore */ }
+  applyGfx();
+};
+// slow phone? if the game runs under ~28 fps for a while, switch to low graphics once
+let slowT = 0, autoLowered = false;
+function watchFps(dt) {
+  if (gfx === 'low' || autoLowered || state !== 'playing') return;
+  slowT = dt > 1 / 28 ? slowT + dt : Math.max(0, slowT - dt * 0.5);
+  if (slowT > 4) { autoLowered = true; gfx = 'low'; try { localStorage.setItem('dokkaebi.gfx', gfx); } catch { /* ignore */ } applyGfx(); hud.toast('폰이 힘들어해서 그래픽을 낮췄다 (일시정지에서 바꿀 수 있음)', 3); }
+}
 
 function resize() {
   renderer.setSize(innerWidth, innerHeight);
@@ -162,7 +184,7 @@ function showMeta(tab) {
   $('meta-screen').hidden = false;
   const tabs = $('meta-tabs');
   tabs.innerHTML = '';
-  for (const [id, label] of [['dex', '📖 도감'], ['ach', '🏆 업적'], ['outfit', '👘 옷']]) {
+  for (const [id, label] of [['train', '🎓 수련'], ['dex', '📖 도감'], ['ach', '🏆 업적'], ['outfit', '👘 옷']]) {
     const t = document.createElement('button');
     t.className = 'ctab' + (id === tab ? ' on' : '');
     t.textContent = label;
@@ -178,7 +200,16 @@ function showMeta(tab) {
     list.appendChild(d);
     return d;
   };
-  if (tab === 'dex') {
+  if (tab === 'train') {
+    row('🪙', `엽전 ${meta.coins()}닢`, '판이 끝나면 버틴 밤·물리친 요괴·구한 사람만큼 받는다. 수련은 영원히 남는다', '');
+    for (const u of UPGRADES) {
+      const lv = meta.lv(u.id);
+      const full = lv >= u.max;
+      const cost = upgradeCost(u, lv);
+      const d = row(u.icon, `${u.name} <small style="display:inline">${lv}/${u.max}</small>`, u.per, full ? '완성' : `🪙 ${cost}`, full ? '' : meta.coins() >= cost ? 'pick' : 'locked');
+      if (!full && meta.coins() >= cost) d.onclick = () => { if (meta.buy(u.id)) { sfx('craft'); } showMeta('train'); showCoins(); };
+    }
+  } else if (tab === 'dex') {
     const n = MONSTER_INFO.filter((m) => dex[m.id]).length;
     row('📖', `${n} / ${MONSTER_INFO.length}칸`, '만나면 도감에 기록된다', '');
     for (const m of MONSTER_INFO) {
@@ -202,7 +233,9 @@ function showMeta(tab) {
     }
   }
 }
-document.querySelectorAll('[data-meta]').forEach((b) => { b.onclick = () => showMeta(b.dataset.meta); });
+document.querySelectorAll('[data-meta]').forEach((b) => { b.onclick = () => { unlock(); showMeta(b.dataset.meta); }; });
+function showCoins() { const b = document.querySelector('[data-meta=train]'); if (b) b.textContent = `🎓 수련 · 🪙${meta.coins()}`; }
+showCoins();
 $('meta-close').onclick = () => { $('meta-screen').hidden = true; };
 // tapping outside a panel closes it (phones: closing buttons are small)
 $('meta-screen').addEventListener('pointerdown', (e) => { if (e.target.id === 'meta-screen') $('meta-screen').hidden = true; });
@@ -213,6 +246,14 @@ function startGame(save = null) {
   if (save instanceof Event) save = null;
   unlock();
   player.reset();
+  // 수련: permanent upgrades
+  player.mods.maxHp += meta.lv('hp') * 5;
+  player.mods.dmg += meta.lv('dmg') * 0.03;
+  player.mods.speed += meta.lv('speed') * 0.02;
+  player.mods.needs += meta.lv('needs') * 0.04;
+  player.xpMul = 1 + meta.lv('xp') * 0.08;
+  player.revives = meta.lv('revive');
+  player.hp = player.maxHp;
   player.setOutfit(meta.outfits().includes(meta.outfit) ? meta.outfit : 'basic');
   player.perks = [];
   player.pearls = 0;
@@ -273,6 +314,10 @@ function startGame(save = null) {
     hud.banner(`${day}일째`, '이어서 버텨라', 2.6);
     return;
   }
+  // 수련 start bonuses (new runs only)
+  player.inv.wood += meta.lv('wood') * 2;
+  player.inv.torch += meta.lv('torch');
+  world.fire.fuel += meta.lv('fire') * 5;
   // start gift (unlocked by achievements) and outfit
   const gift = meta.gift && meta.gifts().includes(meta.gift) ? meta.gift : null;
   if (gift === 'wood10') player.inv.wood += 10;
@@ -304,7 +349,7 @@ function checkAch() {
 }
 let nightStats = { kills: 0, hurt: 0, broken: 0 };
 function gainXp(n) {
-  player.xp += n;
+  player.xp += Math.round(n * (player.xpMul || 1));
   while (player.xp >= xpNeed(player.level)) { player.xp -= xpNeed(player.level); player.level += 1; pendingLevels += 1; }
 }
 function maybeLevelUp() {
@@ -378,6 +423,10 @@ function endGame(won) {
     ? '백 번째 새벽, 도깨비들이 절을 하고 물러났다.'
     : survived > 0 ? `${survived}일 밤을 버텼다. 최고 기록 ${best}일.` : '불빛 가까이 머물고, 밤이 오기 전에 장작을 넉넉히 모아 두자.';
   const st = player.stats;
+  const coins = runCoins({ nights: survived, kills: st.kills, rescued: village.inCamp.length, bosses: st.bosses || 0, hordes: st.hordes || 0 });
+  meta.addCoins(coins);
+  showCoins();
+  $('result-desc').textContent += `  🪙 엽전 +${coins} (첫 화면 "수련"에서 강해지자)`;
   $('result-stats').innerHTML = [
     ['버틴 밤', survived], ['물리친 도깨비', st.kills], ['구한 사람', village.inCamp.length], ['지은 것', st.built],
   ].map(([k, v]) => `<li>${k}<b>${v}</b></li>`).join('');
@@ -426,7 +475,7 @@ function showSummary(night, last, done) {
   $('sum-stars').innerHTML = [0, 1, 2].map((i) => `<span class="${i < stars ? '' : 'off'}">★</span>`).join('');
   $('sum-stats').innerHTML = [['물리친 요괴', st.kills], ['받은 피해', Math.round(st.hurt)], ['부서진 건물', st.broken], ['레벨', player.level]]
     .map(([k, v]) => `<li>${k}<b>${v}</b></li>`).join('');
-  $('sum-reward').textContent = `보상: 도깨비 구슬 +${reward}`;
+  $('sum-reward').textContent = `보상: 도깨비 구슬 +${reward} · 🪙 엽전 +${stars * 2}`;
   state = 'summary';
   input.clear();
   $('summary').hidden = false;
@@ -436,6 +485,7 @@ function showSummary(night, last, done) {
     state = 'playing';
     input.clear();
     gain('bead', reward, { x: player.pos.x, y: 1.4, z: player.pos.z });
+    meta.addCoins(stars * 2);
     gainXp(stars * 10);
     done();
   };
@@ -452,6 +502,16 @@ function strayDog() {
   }
 }
 const DOG_FOOD = ['meat', 'fishc', 'fish', 'rawmeat', 'skewer'];
+/** a building to 강화 right here: no monster close, and the building is nearer than any tree/rock */
+function upgradeHere() {
+  const up = camp.upgradable(player.pos.x, player.pos.z);
+  if (!up) return null;
+  if (monsters.alive.some((m) => Math.hypot(m.pos.x - player.pos.x, m.pos.z - player.pos.z) < 3)) return null;
+  const sd = Math.hypot(up.x - player.pos.x, up.z - player.pos.z) - up.colR;
+  const t = findTarget(2.2);
+  if (t && t.kind !== 'monster' && Math.hypot(t.x - player.pos.x, t.z - player.pos.z) - (t.obj.r || 0.3) < sd) return null;
+  return up;
+}
 const dogNear = () => dog.state === 'stray' && Math.hypot(dog.pos.x - player.pos.x, dog.pos.z - player.pos.z) < 1.9;
 
 /** villagers at the camp bring things each morning */
@@ -662,6 +722,18 @@ function tryAction() {
     hud.popup(was <= 0 ? '불이 다시 붙었다!' : '+불', { x: world.fire.x, y: 2.2, z: world.fire.z }, camera.cam, 'fire');
     return;
   }
+  const up = upgradeHere();
+  if (up) {
+    const next = TIERS[up.tier + 1];
+    if (!canAfford(player.inv, next.cost)) { hud.toast(`${next.name}로 강화하려면 ${Object.entries(next.cost).map(([k, v]) => `${ITEMS[k].name} ${v}`).join(', ')}`, 2); sfx('deny'); return; }
+    pay(player.inv, next.cost);
+    camp.setTier(up, up.tier + 1);
+    up.hp = up.maxHp;
+    sfx('build'); sfx('craft');
+    effects.spawn(up.x, 1, up.z, up.tier === 2 ? 0x8a96a8 : 0xc0c0c8, { n: 18, speed: 3, up: 5, life: 0.8, size: 0.13, grav: 4 });
+    hud.popup(`${next.name} ${STRUCT[up.kind].name}!`, { x: up.x, y: 2.4, z: up.z }, camera.cam, 'fire big');
+    return;
+  }
   // auto-aim when standing still (helps a lot on touch)
   const target = findTarget(2.6);
   let aim = null;
@@ -770,11 +842,12 @@ function updateArrows(dt) {
       a.vel.lerp(to, Math.min(1, dt * 12));
     }
     a.mesh.position.addScaledVector(a.vel, dt);
-    a.mesh.lookAt(a.mesh.position.x + a.vel.x, 1.3, a.mesh.position.z + a.vel.z);
+    if (a.by) a.mesh.position.y = Math.max(1.2, a.mesh.position.y - dt * 4); // tower arrows drop toward the target
+    a.mesh.lookAt(a.mesh.position.x + a.vel.x, a.mesh.position.y, a.mesh.position.z + a.vel.z);
     a.life -= dt;
     for (const m of monsters.alive) {
       if (Math.hypot(m.pos.x - a.mesh.position.x, m.pos.z - a.mesh.position.z) < m.radius + 0.35) {
-        damageMonster(m, WEAPONS.bow.dmg, { kb: 0.4 });
+        damageMonster(m, a.dmg || WEAPONS.bow.dmg, { kb: 0.4, by: a.by || null, canCrit: !a.by });
         a.life = 0;
         break;
       }
@@ -972,12 +1045,27 @@ function useItem(id) {
     hud.popup(n ? `부적! 도깨비 ${n}마리를 쫓았다` : '부적!', { x: player.pos.x, y: 2.6, z: player.pos.z }, camera.cam, 'fire big');
   } else if (PLACEABLE.includes(id)) {
     const ahead = id === 'hut' ? 2.6 : id === 'trap' ? 1.2 : 1.5;
-    const x = player.pos.x + fx * ahead, z = player.pos.z + fz * ahead;
+    let x = player.pos.x + fx * ahead, z = player.pos.z + fz * ahead;
+    let facing = player.facing;
+    if (['fence', 'wall', 'gate'].includes(id)) {
+      // line pieces snap to 45° and continue a nearby wall so lines join up neatly
+      facing = Math.round(facing / (Math.PI / 4)) * (Math.PI / 4);
+      let best = null, bd = 1.3;
+      for (const sgm of camp.structs) {
+        if (!['fence', 'wall', 'gate'].includes(sgm.kind)) continue;
+        const ax = Math.cos(sgm.f), az = -Math.sin(sgm.f), len = sgm.kind === 'fence' ? 1.5 : 1.6;
+        for (const sd of [-1, 1]) {
+          const cx = sgm.x + ax * len * sd, cz = sgm.z + az * len * sd, d = Math.hypot(cx - x, cz - z);
+          if (d < bd) { bd = d; best = { x: cx, z: cz, f: sgm.f }; }
+        }
+      }
+      if (best) { x = best.x; z = best.z; facing = best.f; }
+    }
     const why = camp.checkSpot(id, x, z);
     if (why) { hud.toast(why, 1.4); sfx('deny'); return; }
     sfx('build');
     player.inv[id] -= 1;
-    camp.build(id, x, z, player.facing);
+    camp.build(id, x, z, facing);
     player.stats.built += 1;
     effects.spawn(x, 0.4, z, ['fence', 'jangseung', 'hut', 'trap'].includes(id) ? 0xb07a45 : 0xd6d3cb, { n: 12, speed: 2.5, up: 3, life: 0.6, size: 0.13 });
     camera.shake = Math.max(camera.shake, 0.3);
@@ -1104,8 +1192,10 @@ let last = performance.now();
 let clock = 0;
 function frame(now) {
   requestAnimationFrame(frame);
-  const dt = Math.min(0.05, (now - last) / 1000);
+  const raw = (now - last) / 1000;
+  const dt = Math.min(0.05, raw);
   last = now;
+  if (raw < 0.5) watchFps(raw);
   tick(dt);
 }
 
@@ -1212,6 +1302,7 @@ function tick(dt) {
   world.updateRocks(dt);
   world.updateOcclusion(dt, player.pos.x, player.pos.z, camera.back);
   camp.update(dt, nowS, darkness, camera.cam, player.pos);
+  camp.updateGates(dt, player.pos);
 
   // torch: a small moving light that also keeps monsters back
   if (player.torchT > 0) {
@@ -1244,6 +1335,15 @@ function tick(dt) {
     if (e.type === 'bite') { damageMonster(e.m, 8, { fromX: dog.pos.x, fromZ: dog.pos.z, kb: 0.5, canCrit: false, by: '백구' }); }
     else if (e.type === 'bark') { if (Math.random() < 0.6) sfx('bark'); }
     else if (e.type === 'tired') hud.popup('헥헥…', { x: dog.pos.x, y: 1.6, z: dog.pos.z }, camera.cam, 'water big');
+  }
+  for (const sh of camp.towerShots(dt, monsters.alive, darkness > 0.4)) {
+    const s = sh.tower;
+    const mesh = new THREE.Mesh(arrowGeo, arrowMat);
+    mesh.position.set(s.x, 3.0, s.z);
+    scene.add(mesh);
+    const v = new THREE.Vector3(sh.m.pos.x - s.x, 0, sh.m.pos.z - s.z).normalize().multiplyScalar(24);
+    arrows.push({ mesh, vel: v, target: sh.m, life: 0.8, dmg: 8 + s.tier * 4, by: '망루' });
+    if (Math.hypot(s.x - player.pos.x, s.z - player.pos.z) < 14) sfx('swing');
   }
   for (const h of camp.springTraps(monsters.alive)) {
     effects.spawn(h.trap.x, 0.4, h.trap.z, 0xe8dcc0, { n: 10, speed: 3, up: 3, life: 0.4, size: 0.1 });
@@ -1390,6 +1490,18 @@ function tick(dt) {
   }
   daynight.blood = tonight === 'bloodmoon' ? 1 : 0;
 
+  if (player.dead && player.revives > 0) {
+    // 다시 일어나기 (수련): once per run
+    player.revives -= 1;
+    player.dead = false;
+    player.hp = Math.round(player.maxHp / 2);
+    player.invuln = 2.5;
+    player.rig.spin.rotation.z = 0;
+    monsters.banishNear(player.pos.x, player.pos.z, 5);
+    effects.spawn(player.pos.x, 1.2, player.pos.z, 0xffe27a, { n: 30, speed: 4, up: 7, life: 1, size: 0.14, grav: 4 });
+    hud.banner('다시 일어났다!', '수련의 힘 (이번 판 한 번)', 2.6);
+    sfx('dawn');
+  }
   if (player.dead) { endGame(false); }
   else if (phase === 'dawn') newDay();
 
@@ -1423,7 +1535,7 @@ function tick(dt) {
     torch: player.torchT,
     weapon: player.weapon, weaponCount: player.weapons.length, arrows: player.inv.arrow || 0,
     weaponName: player.weapon === 'axe' ? ['돌도끼', '쇠도끼', '강철도끼'][player.axeLevel] : WEAPONS[player.weapon].name,
-    actionLabel: player.fishT > 0 ? '낚시 중' : chest ? '열기' : dogNear() ? '먹이 주기' : rescuable() ? '구하기' : (village.talkable(player.pos.x, player.pos.z) && !nearFire()) ? '말 걸기' : (camp.repairable(player.pos.x, player.pos.z) && !nearFire()) ? '고치기' : canFish() ? '낚시' : canDrink() ? '물 마시기' : bushNear() ? '따기' : nearFire() && player.wood > 0 ? '장작 넣기' : '베기',
+    actionLabel: player.fishT > 0 ? '낚시 중' : chest ? '열기' : dogNear() ? '먹이 주기' : rescuable() ? '구하기' : (village.talkable(player.pos.x, player.pos.z) && !nearFire()) ? '말 걸기' : (camp.repairable(player.pos.x, player.pos.z) && !nearFire()) ? '고치기' : (!nearFire() && upgradeHere()) ? '강화' : canFish() ? '낚시' : canDrink() ? '물 마시기' : bushNear() ? '따기' : nearFire() && player.wood > 0 ? '장작 넣기' : '베기',
     water: player.water, food: player.food, level: player.level, xp: player.xp, xpNeed: xpNeed(player.level),
     boss: monsters.boss && monsters.boss.alive ? monsters.boss : null,
     rollCool: player.rollCool > 0 || player.rolling, canCraft,

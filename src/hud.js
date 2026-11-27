@@ -9,7 +9,7 @@ const RES_KINDS = ['wood', 'stone', 'bead'];
 export const EMOJI = {
   'w-spear': '🔱', 'w-axe1': '🪓', 'w-axe2': '🪓', 'w-sword': '🗡️', 'w-mace': '🔨', 'w-bow': '🏹', arrow: '➶',
   armor: '🦺', sandals: '👡', rod: '🎣', torch: '🔥', charm: '📜', fence: '🪵', trap: '📌', jangseung: '🗿',
-  lantern: '🏮', well: '🪣', hut: '🛖', tower: '🪨', meat: '🍖', skewer: '🍢', fishc: '🐟', herb: '🌿', fireup: '🔥',
+  lantern: '🏮', well: '🪣', hut: '🛖', tower: '🪨', wall: '🧱', gate: '⛩️', watch: '🗼', meat: '🍖', skewer: '🍢', fishc: '🐟', herb: '🌿', fireup: '🔥',
   fish: '🐠', berry: '🍓', rawmeat: '🥩',
 };
 const costIcon = (k) => (RES_KINDS.includes(k) ? `<span class="res-icon ${k}"></span>` : EMOJI[k] ? `<span class="emoji-mini">${EMOJI[k]}</span>` : `<span class="item-icon ${k} mini"></span>`);
@@ -39,7 +39,7 @@ export class Hud {
       const b = document.createElement('button');
       b.className = 'item-btn';
       b.dataset.kind = id;
-      const pic = ['skewer', 'fish', 'fishc', 'jangseung', 'trap', 'hut', 'tower'].includes(id) ? `<span class="emoji-icon">${EMOJI[id]}</span>` : `<span class="item-icon ${id}"></span>`;
+      const pic = ['skewer', 'fish', 'fishc', 'jangseung', 'trap', 'hut', 'tower', 'wall', 'gate', 'watch'].includes(id) ? `<span class="emoji-icon">${EMOJI[id]}</span>` : `<span class="item-icon ${id}"></span>`;
       b.innerHTML = `${pic}<b>0</b><small>${ITEMS[id].name}</small>`;
       b.hidden = true;
       b.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); this.input.pressed.add('item:' + id); this.bump(b); });

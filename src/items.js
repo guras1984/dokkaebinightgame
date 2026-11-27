@@ -17,6 +17,9 @@ export const ITEMS = {
   trap:    { name: '가시 덫', use: true, hint: '앞에 설치' },
   hut:     { name: '초가집', use: true, hint: '앞에 설치' },
   tower:   { name: '돌탑', use: true, hint: '앞에 설치' },
+  wall:    { name: '돌담', use: true, hint: '앞에 설치' },
+  gate:    { name: '성문', use: true, hint: '앞에 설치' },
+  watch:   { name: '망루', use: true, hint: '앞에 설치' },
   fence:   { name: '울타리', use: true, hint: '앞에 설치' },
   torch:   { name: '횃불', use: true, hint: '들고 다니는 빛' },
   skewer:  { name: '고기 꼬치', use: true, hint: '배고픔 많이 + 체력' },
@@ -24,12 +27,12 @@ export const ITEMS = {
   fishc:   { name: '생선 구이', use: true, hint: '배고픔 + 목마름' },
   arrow:   { name: '화살' },
 };
-export const USE_ORDER = ['berry', 'meat', 'skewer', 'fish', 'fishc', 'rawmeat', 'herb', 'charm', 'torch', 'lantern', 'fence', 'well', 'jangseung', 'trap', 'hut', 'tower'];
+export const USE_ORDER = ['berry', 'meat', 'skewer', 'fish', 'fishc', 'rawmeat', 'herb', 'charm', 'torch', 'lantern', 'fence', 'well', 'jangseung', 'trap', 'hut', 'tower', 'wall', 'gate', 'watch'];
 /** items that get placed in front of you */
-export const PLACEABLE = ['lantern', 'fence', 'well', 'jangseung', 'trap', 'hut', 'tower'];
+export const PLACEABLE = ['lantern', 'fence', 'well', 'jangseung', 'trap', 'hut', 'tower', 'wall', 'gate', 'watch'];
 
 export function emptyInventory() {
-  return { wood: 0, stone: 0, bead: 0, berry: 0, meat: 0, rawmeat: 0, herb: 0, charm: 0, lantern: 0, fence: 0, well: 0, torch: 0, arrow: 0, jangseung: 0, trap: 0, hut: 0, tower: 0, skewer: 0, fish: 0, fishc: 0 };
+  return { wood: 0, stone: 0, bead: 0, berry: 0, meat: 0, rawmeat: 0, herb: 0, charm: 0, lantern: 0, fence: 0, well: 0, torch: 0, arrow: 0, jangseung: 0, trap: 0, hut: 0, tower: 0, skewer: 0, fish: 0, fishc: 0, wall: 0, gate: 0, watch: 0 };
 }
 
 /**
@@ -53,6 +56,9 @@ export const RECIPES = [
   { id: 'charm', cat: 'tool', icon: 'charm', name: '부적', desc: '주변 도깨비를 한 번에 쫓아낸다', cost: { bead: 2, wood: 1 }, gives: 'charm', show: () => true },
   // 짓기
   { id: 'fence', cat: 'build', icon: 'fence', name: '울타리 ×2', desc: '길을 막는 벽 (튼튼함 60)', cost: { wood: 3 }, gives: 'fence', amount: 2, show: () => true },
+  { id: 'wall', cat: 'build', icon: 'wall', name: '돌담 ×2', desc: '튼튼한 벽 (220). 나란히 놓으면 이어진다', cost: { stone: 6 }, gives: 'wall', amount: 2, show: () => true },
+  { id: 'gate', cat: 'build', icon: 'gate', name: '성문', desc: '나는 지나가고 도깨비는 막는 문', cost: { wood: 4, stone: 4 }, gives: 'gate', show: () => true },
+  { id: 'watch', cat: 'build', icon: 'watch', name: '망루', desc: '밤에 다가오는 요괴에게 화살을 쏜다', cost: { wood: 10, stone: 4, bead: 2 }, gives: 'watch', show: () => true },
   { id: 'trap', cat: 'build', icon: 'trap', name: '가시 덫', desc: '밟은 도깨비 피해 20, 세 번 쓰면 부서짐', cost: { wood: 3, stone: 2 }, gives: 'trap', show: () => true },
   { id: 'jangseung', cat: 'build', icon: 'jangseung', name: '장승', desc: '둘레의 도깨비가 느려진다', cost: { wood: 6, bead: 2 }, gives: 'jangseung', show: () => true },
   { id: 'lantern', cat: 'build', icon: 'lantern', name: '석등', desc: '밤에 켜지는 작은 안전지대', cost: { stone: 5, wood: 2 }, gives: 'lantern', show: () => true },
