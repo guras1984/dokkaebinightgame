@@ -36,20 +36,43 @@
     .tags { display: flex; flex-wrap: wrap; gap: 6px; }
     .tags span { font-size: 11px; font-weight: 800; padding: 4px 9px; border-radius: 999px; background: #fff0cc; color: #9a5a00; }
     .tags span.new { background: #dcf5d6; color: #2e7d32; }
-    a.game { color: inherit; text-decoration: none; transition: transform .12s; }
-    a.game:active { transform: scale(.98); }
+    .box { border-radius: 22px; background: var(--card); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(90, 60, 20, .12); overflow: hidden; }
+    .box > a.game { background: none; border: 0; box-shadow: none; border-radius: 0; color: inherit; text-decoration: none; }
+    .box > a.game:active { background: rgba(255, 180, 60, .08); }
+    .sheet-bg { position: fixed; inset: 0; background: rgba(40, 30, 10, .35); display: flex; align-items: flex-end; justify-content: center; z-index: 10; animation: fade .15s; }
+    .sheet-bg[hidden] { display: none; }
+    .sheet { width: 100%; max-width: 520px; background: #fffaf0; border-radius: 26px 26px 0 0; padding: 12px 16px calc(20px + env(safe-area-inset-bottom)); box-shadow: 0 -10px 30px rgba(60, 40, 10, .25); animation: up .2s ease-out; max-height: 86vh; overflow: auto; }
+    .sheet .grab { width: 44px; height: 5px; border-radius: 9px; background: #e3d6bd; margin: 0 auto 12px; }
+    .sheet-top { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .sheet-top img { width: 56px; height: 56px; border-radius: 14px; }
+    .sheet-top h3 { margin: 0; font-size: 22px; }
+    .sheet-top button { margin-left: auto; border: 0; background: #f1e8d6; border-radius: 50%; width: 36px; height: 36px; font-size: 18px; color: var(--dim); }
+    .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .choice { display: grid; place-items: center; gap: 4px; padding: 18px 8px; border-radius: 20px; border: 0; font: inherit; font-weight: 900; font-size: 18px; text-decoration: none; cursor: pointer; }
+    .choice span { font-size: 34px; }
+    .choice small { font-size: 12px; font-weight: 700; opacity: .75; }
+    .choice.solo { background: linear-gradient(180deg, var(--gold), var(--gold2)); color: #3a1d00; box-shadow: 0 4px 0 #c06a10; }
+    .choice.team { background: linear-gradient(180deg, #9be58f, #5cc35a); color: #0f3d10; box-shadow: 0 4px 0 #3c8f3a; }
+    .choice.team.on { outline: 3px solid #2e7d32; outline-offset: 2px; }
+    .together { margin-top: 16px; }
+    .together[hidden] { display: none; }
+    .cr-head { font-size: 13px; font-weight: 900; color: var(--dim); margin: 0 2px 8px; }
+    .mini { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+    .mini a { text-align: center; padding: 11px 6px; border-radius: 14px; background: #fff; border: 1px solid var(--line); color: var(--ink); text-decoration: none; font-weight: 800; font-size: 14px; }
+    @keyframes up { from { transform: translateY(40px); opacity: 0; } }
+    @keyframes fade { from { opacity: 0; } }
     .go { float: right; color: #ff8a1f; font-size: 30px; line-height: .8; }
     h2 small { font-size: 12px; letter-spacing: 0; opacity: .8; margin-left: 4px; }
     .rooms { display: grid; gap: 8px; }
-    .room { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); color: inherit; text-decoration: none; }
-    .room .pic { font-size: 24px; }
+    .room { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 14px; background: #fff; border: 1px solid var(--line); color: inherit; text-decoration: none; }
+    .room .pic { font-size: 20px; }
     .room div { flex: 1; min-width: 0; }
-    .room b { display: block; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .room b { display: block; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .room small { color: var(--dim); font-size: 12px; }
-    .room .join { font-weight: 900; font-size: 14px; padding: 8px 14px; border-radius: 12px; background: linear-gradient(180deg, var(--gold), var(--gold2)); color: #3a1d00; box-shadow: 0 3px 0 #c06a10; }
+    .room .join { font-weight: 900; font-size: 13px; padding: 7px 12px; border-radius: 12px; background: linear-gradient(180deg, var(--gold), var(--gold2)); color: #3a1d00; box-shadow: 0 3px 0 #c06a10; }
     .room.full { opacity: .55; pointer-events: none; }
     .room.full .join { background: #ddd; box-shadow: none; color: #777; }
-    .empty { padding: 14px; border-radius: 16px; background: var(--card); border: 1px dashed var(--line); color: var(--dim); font-size: 14px; line-height: 1.6; }
+    .empty { padding: 4px 2px; color: var(--dim); font-size: 13px; line-height: 1.6; }
     .soon { opacity: .7; grid-template-columns: 112px 1fr; }
     .soon .ph { width: 112px; height: 112px; border-radius: 24px; display: grid; place-items: center; font-size: 46px; background: #f3efe6; border: 2px dashed rgba(120,90,40,.25); }
     .news { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
@@ -74,19 +97,16 @@
     </header>
 
     <h2>지금 할 수 있는 게임</h2>
-    <a class="game" href="./dokkaebi/">
-      <img src="./dokkaebi.png" alt="도깨비 밤" />
-      <div>
-        <h3>도깨비 밤 <span class="go">›</span></h3>
-        <p>해가 지면 도깨비가 몰려온다. 낮에는 모으고 짓고, 밤에는 모닥불을 지켜 <b>백 일 밤</b>을 버텨라.</p>
-        <div class="tags"><span>생존</span><span>한국 설화</span><span class="new">👫 같이 하기</span><span>무료</span></div>
-      </div>
-    </a>
-
-    <section id="rooms" hidden>
-      <h2>👫 지금 열린 방 <small>도깨비 밤</small></h2>
-      <div id="room-list" class="rooms"></div>
-    </section>
+    <article class="box">
+      <a class="game" href="./dokkaebi/" data-sheet="dokkaebi">
+        <img src="./dokkaebi.png" alt="도깨비 밤" />
+        <div>
+          <h3>도깨비 밤 <span class="go">›</span></h3>
+          <p>해가 지면 도깨비가 몰려온다. 낮에는 모으고 짓고, 밤에는 모닥불을 지켜 <b>백 일 밤</b>을 버텨라.</p>
+          <div class="tags"><span>생존</span><span>한국 설화</span><span class="new">👫 같이 하기</span><span>무료</span></div>
+        </div>
+      </a>
+    </article>
 
     <h2>곧 나올 게임</h2>
     <article class="game soon">
@@ -108,29 +128,57 @@
       카카오톡으로 받은 링크는 자동으로 기본 브라우저에서 열려요.
     </div>
 
+    <div class="sheet-bg" id="sheet" hidden>
+      <div class="sheet" role="dialog" aria-label="도깨비 밤">
+        <div class="grab"></div>
+        <div class="sheet-top"><img src="./dokkaebi.png" alt="" /><h3>도깨비 밤</h3><button id="sheet-x" aria-label="닫기">✕</button></div>
+        <div class="choices">
+          <a class="choice solo" href="./dokkaebi/"><span>🧍</span>혼자 하기<small>내 섬에서 이어서</small></a>
+          <button class="choice team" id="team-btn"><span>👫</span>같이 하기<small>친구와 한 섬에서</small></button>
+        </div>
+        <div class="together" id="together" hidden>
+          <div class="cr-head">🌐 지금 열린 방</div>
+          <div id="room-list" class="rooms"><div class="empty">불러오는 중…</div></div>
+          <div class="mini">
+            <a href="./dokkaebi/?mp=create">➕ 방 만들기</a>
+            <a href="./dokkaebi/?mp=code">🔢 번호로 들어가기</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <footer>뚝 · ttuk.pages.dev</footer>
   </main>
   <script>
-    // open rooms of 도깨비 밤 (from the room server); hidden if the server can't be reached
     const SERVER = 'https://dokkaebi-night.dokkaebi-night-server.workers.dev';
+    const $ = (id) => document.getElementById(id);
     const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    let timer = 0;
     async function loadRooms() {
+      const box = $('room-list');
       let rooms;
-      try { rooms = (await (await fetch(SERVER + '/rooms', { cache: 'no-store' })).json()).rooms || []; } catch { return; }
-      const box = document.getElementById('room-list');
-      box.innerHTML = rooms.length ? '' : '<div class="empty">지금 열린 방이 없어요.<br>게임에서 <b>👫 같이 하기 → 방 만들기</b>로 먼저 열어 보세요!</div>';
+      try { rooms = (await (await fetch(SERVER + '/rooms', { cache: 'no-store' })).json()).rooms || []; }
+      catch { box.innerHTML = '<div class="empty">방 목록을 불러올 수 없어요. 잠시 뒤 다시 해 주세요.</div>'; return; }
       rooms.sort((a, b) => (a.locked - b.locked) || (b.n - a.n));
-      for (const r of rooms.slice(0, 8)) {
+      box.innerHTML = rooms.length ? '' : '<div class="empty">아직 열린 방이 없어요. 아래 <b>방 만들기</b>로 먼저 열어 보세요!</div>';
+      for (const r of rooms.slice(0, 20)) {
         const full = r.n >= r.max;
         box.insertAdjacentHTML('beforeend', `<a class="room${full ? ' full' : ''}" href="./dokkaebi/?room=${encodeURIComponent(r.code)}">
           <span class="pic">${r.locked ? '🔒' : '🌐'}</span>
           <div><b>${esc(r.name || '도깨비 방')}</b><small>방 번호 ${esc(r.code)} · ${r.n}/${r.max}명${r.locked ? ' · 비밀번호' : ''}</small></div>
           <span class="join">${full ? '가득' : '들어가기'}</span></a>`);
       }
-      document.getElementById('rooms').hidden = false;
     }
-    loadRooms();
-    setInterval(() => { if (!document.hidden) loadRooms(); }, 15000);
+    function openSheet() { $('sheet').hidden = false; }
+    function closeSheet() { $('sheet').hidden = true; $('together').hidden = true; $('team-btn').classList.remove('on'); clearInterval(timer); }
+    document.querySelector('[data-sheet="dokkaebi"]').addEventListener('click', (e) => { e.preventDefault(); openSheet(); });
+    $('sheet-x').onclick = closeSheet;
+    $('sheet').addEventListener('click', (e) => { if (e.target.id === 'sheet') closeSheet(); });
+    $('team-btn').onclick = () => {
+      $('together').hidden = false; $('team-btn').classList.add('on');
+      loadRooms(); clearInterval(timer); timer = setInterval(() => { if (!document.hidden) loadRooms(); }, 10000);
+    };
+    addEventListener('pageshow', (e) => { if (e.persisted) closeSheet(); });   // back button from the game: start clean
   </script>
 </body>
 </html>

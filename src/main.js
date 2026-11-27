@@ -493,12 +493,13 @@ fetch(SERVER_URL + '/', { cache: 'no-store' }).then((r) => r.json()).then((j) =>
 $('mp-close').onclick = () => { $('mp-screen').hidden = true; };
 $('mp-screen').addEventListener('pointerdown', (e) => { if (e.target.id === 'mp-screen') $('mp-screen').hidden = true; });
 $('mp-reroll').onclick = () => { setNick(randomNick()); $('mp-nick').textContent = myNick(); };
-// a room link from the ttuk portal (…/dokkaebi/?room=1234): open "번호로 들어가기" with the number filled in
+// links from the ttuk portal: ?room=1234 → "번호로 들어가기" with the number filled in; ?mp=create|code|list → that tab
 {
-  const rc = params.get('room');
-  if (/^\d{4}$/.test(rc || '')) {
-    const u = new URL(location.href); u.searchParams.delete('room'); history.replaceState(null, '', u);
-    showRooms('code').then(() => { $('mp-code').value = rc; mpMsg('방 ' + rc + ' — 비밀번호 방이면 비밀번호를 넣고 "들어가기"'); });
+  const rc = params.get('room'), tab = params.get('mp');
+  if (/^\d{4}$/.test(rc || '') || ['list', 'create', 'code'].includes(tab)) {
+    const u = new URL(location.href); u.searchParams.delete('room'); u.searchParams.delete('mp'); history.replaceState(null, '', u);
+    if (rc && /^\d{4}$/.test(rc)) showRooms('code').then(() => { $('mp-code').value = rc; mpMsg('방 ' + rc + ' — 비밀번호 방이면 비밀번호를 넣고 "들어가기"'); });
+    else showRooms(tab);
   }
 }
 
