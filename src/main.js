@@ -150,7 +150,7 @@ function saveGame() {
   if (mp) return;   // together always starts fresh from day 1; only solo play is saved
   store.set(SAVE_KEY, JSON.stringify({
     v: 1, day, mode, t: +daynight.time.toFixed(1), pos: [+player.pos.x.toFixed(2), +player.pos.z.toFixed(2)], seed: world.seed, explored: minimap.serialize(), inv: player.inv, ironAxe: player.ironAxe, axeLevel: player.axeLevel, armor: player.armor, hp: Math.round(player.hp),
-    villagers: village.inCamp.map((p) => p.def.id), level: player.level, xp: player.xp, perks: player.perks || [], pearls: player.pearls || 0, dog: dog.tamed, weapons: player.weapons, weapon: player.weapon, sandals: !!player.sandals, rod: !!player.rod,
+    villagers: village.inCamp.map((p) => p.def.id), level: player.level, xp: player.xp, perks: player.perks || [], pearls: player.pearls || 0, dog: dog.tamed, weapons: player.weapons, wlv: player.wlv, weapon: player.weapon, sandals: !!player.sandals, rod: !!player.rod,
     water: Math.round(player.water), food: Math.round(player.food),
     fireLv: world.fire.level, fuel: Math.round(world.fire.fuel), stats: player.stats, camp: camp.serialize(),
   }));
@@ -664,6 +664,7 @@ function startGame(save = null) {
     player.setAxe(save.axeLevel ?? (save.ironAxe ? 1 : 0));
     player.setArmor(!!save.armor);
     if (save.weapons) { player.weapons = [...save.weapons]; player.setWeapon(save.weapon || 'axe'); }
+    player.wlv = { ...(save.wlv || {}) };
     player.sandals = !!save.sandals; player.rod = !!save.rod;
     player.level = save.level || 1; player.xp = save.xp || 0; player.perks = save.perks || [];
     for (const id of player.perks) { const pk = PERKS.find((q) => q.id === id); if (pk) pk.apply(player.mods); }
@@ -998,7 +999,7 @@ const bushNear = () => world.bushes.find((b) => b.ripe && Math.hypot(b.x - playe
 /** first time you get something, say what it is for */
 const FIRST_HINT = {
   stone: '돌: 석등·우물·모닥불 키우기 재료',
-  bead: '도깨비 구슬: 쇠도끼·부적·약초 재료',
+  bead: '도깨비 구슬: 무기 단련(만들기)·쇠도끼·부적·약초 재료',
   rawmeat: '날고기: 모닥불 옆에서 누르면 구워진다',
   berry: '산딸기: 누르면 먹는다 (배고픔 회복)',
   herb: '약초: 누르면 체력 회복',
@@ -1241,7 +1242,7 @@ function shootArrow() {
   mesh.position.set(player.pos.x + fx * 0.6, 1.3, player.pos.z + fz * 0.6);
   scene.add(mesh);
   const vel = new THREE.Vector3(fx, 0, fz).multiplyScalar(26);
-  arrows.push({ mesh, vel, target, life: 0.6 });
+  arrows.push({ mesh, vel, target, life: 0.6, dmg: Math.round(WEAPONS.bow.dmg * trainMul('bow')) });
   sfx('swing');
 }
 function updateArrows(dt) {
@@ -1272,7 +1273,7 @@ function resolveStrike() {
   if (W.ranged) { shootArrow(); return; }
   const fx = Math.sin(player.facing), fz = Math.cos(player.facing);
   const reach = W.reach + (id === 'axe' ? player.axeLevel * 0.2 : 0);
-  const base = weaponDmg(id, player.axeLevel);
+  const base = Math.round(weaponDmg(id, player.axeLevel) * trainMul(id));
   let hitSomething = false;
   for (const m of monsters.alive) {
     const dx = m.pos.x - player.pos.x, dz = m.pos.z - player.pos.z, d = Math.hypot(dx, dz);
@@ -1374,6 +1375,14 @@ function craft(id) {
     if (!announced.weaponTip) { announced.weaponTip = true; hud.toast('무기 버튼(Q)으로 무기를 바꿀 수 있다', 2.4); }
     return;
   }
+  if (id === 'train') {
+    const w = player.weapon, lv = (player.wlv[w] || 0) + 1;
+    player.wlv[w] = Math.min(TRAIN_MAX, lv);
+    show(`${weaponLabel(w)} +${lv}!`, 0x9fd8ff);
+    camera.shake = 0.4;
+    sfx('bead');
+    return;
+  }
   if (id === 'sandals') { player.sandals = true; show('짚신! 발이 가볍다', 0xd9b04a); return; }
   if (id === 'rod') { player.rod = true; show('낚싯대! 물가에서 낚시', 0x7fd3ff); return; }
   if (id === 'fire2' || id === 'fire3') {
@@ -1402,7 +1411,21 @@ function craft(id) {
   }
 }
 
+// 무기 단련: spend 도깨비 구슬 to make the weapon in hand stronger (+10% each, up to +10; 5, 10, 15 … beads)
+const TRAIN_MAX = 10;
+const trainMul = (id) => 1 + 0.1 * ((player.wlv && player.wlv[id]) || 0);
+const TRAIN_ICON = { axe: 'w-axe1', spear: 'w-spear', sword: 'w-sword', mace: 'w-mace', bow: 'w-bow', club: 'w-club' };
+const weaponLabel = (id) => (id === 'axe' ? ['돌도끼', '쇠도끼', '강철도끼'][player.axeLevel] : WEAPONS[id].name);
+function trainCard() {
+  const id = player.weapon, lv = player.wlv[id] || 0, r = RECIPES.find((x) => x.id === 'train');
+  r.name = `${weaponLabel(id)} 단련 +${lv + 1}`;
+  r.cost = { bead: 5 * (lv + 1) };
+  r.desc = lv ? `피해 +10% 더 (지금 +${lv * 10}%)` : '들고 있는 무기 피해 +10%';
+  r.icon = TRAIN_ICON[id] || 'w-axe1';
+  return lv;
+}
 const craftState = () => ({
+  trainLv: trainCard(),
   fireLevel: world.fire.level, ironAxe: player.ironAxe, axeLevel: player.axeLevel, armor: player.armor,
   musoe: village.has('musoe'), beomsu: village.has('beomsu'), sandals: !!player.sandals, rod: !!player.rod,
   nearFire: nearFire(), has: (w) => player.weapons.includes(w),
@@ -1972,7 +1995,7 @@ function tick(dt) {
     day, phase, progress: daynight.progress(), remain: daynight.remaining(),
     torch: player.torchT,
     weapon: player.weapon, weaponCount: player.weapons.length, arrows: player.inv.arrow || 0,
-    weaponName: player.weapon === 'axe' ? ['돌도끼', '쇠도끼', '강철도끼'][player.axeLevel] : WEAPONS[player.weapon].name,
+    weaponName: weaponLabel(player.weapon) + (player.wlv[player.weapon] ? ` +${player.wlv[player.weapon]}` : ''),
     actionLabel: player.fishT > 0 ? '낚시 중' : downFriend() ? '살리기' : chest ? '열기' : dogNear() ? '먹이 주기' : rescuable() ? '구하기' : (village.talkable(player.pos.x, player.pos.z) && !nearFire()) ? '말 걸기' : (camp.repairable(player.pos.x, player.pos.z) && !nearFire()) ? '고치기' : (!nearFire() && upgradeHere()) ? '강화' : canFish() ? '낚시' : canDrink() ? '물 마시기' : bushNear() ? '따기' : nearFire() && player.wood > 0 ? '장작 넣기' : '베기',
     water: player.water, food: player.food, level: player.level, xp: player.xp, xpNeed: xpNeed(player.level),
     boss: monsters.boss && monsters.boss.alive ? monsters.boss : null,

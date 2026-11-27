@@ -28,6 +28,7 @@ export class Player {
     this.water = 100;
     this.food = 100;
     this.weapons = ['axe'];
+    this.wlv = {};              // 무기 단련: weapon id → +level (each +10% damage)
     this.sandals = false;
     this.rod = false;
     this.fishT = 0;

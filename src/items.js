@@ -42,6 +42,7 @@ export function emptyInventory() {
  */
 export const RECIPES = [
   // 무기·도구
+  { id: 'train', cat: 'tool', icon: 'w-axe1', name: '무기 단련', desc: '', cost: { bead: 5 }, show: (s) => s.trainLv < 10 },
   { id: 'spear', cat: 'tool', icon: 'w-spear', name: '창', desc: '길게 찔러 한 줄을 꿰뚫는다 (피해 12)', cost: { wood: 4, stone: 2 }, weapon: 'spear', show: (s) => !s.has('spear') },
   { id: 'axe', cat: 'tool', icon: 'w-axe1', name: '쇠도끼', desc: '피해 18, 나무를 두 번에', cost: { stone: 8, bead: 3 }, show: (s) => s.axeLevel === 0 },
   { id: 'steelaxe', cat: 'tool', icon: 'w-axe2', name: '강철 도끼', desc: '피해 28, 나무를 한 번에', cost: { stone: 12, bead: 6 }, show: (s) => s.axeLevel === 1, lock: (s) => (!s.musoe ? '대장장이 무쇠를 구하면' : null) },

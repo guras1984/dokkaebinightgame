@@ -10,7 +10,7 @@ const ACTION_ICON = { '베기': '🪓', '장작 넣기': '🔥', '열기': '📦
 const ACTION_KIND = { '장작 넣기': 'fire', '물 마시기': 'water', '낚시': 'water', '낚시 중': 'water', '말 걸기': 'talk', '구하기': 'gold', '열기': 'gold', '따기': 'gold', '고치기': 'build', '강화': 'build', '먹이 주기': 'gold', '살리기': 'gold' };
 // card / slot pictures (emoji draw nicely on phones)
 export const EMOJI = {
-  'w-spear': '🔱', 'w-axe1': '🪓', 'w-axe2': '🪓', 'w-sword': '🗡️', 'w-mace': '🔨', 'w-bow': '🏹', arrow: '➶',
+  'w-spear': '🔱', 'w-axe1': '🪓', 'w-axe2': '🪓', 'w-sword': '🗡️', 'w-mace': '🔨', 'w-bow': '🏹', 'w-club': '🏏', arrow: '➶',
   armor: '🦺', sandals: '👡', rod: '🎣', torch: '🔥', charm: '📜', fence: '🪵', trap: '📌', jangseung: '🗿',
   lantern: '🏮', well: '🪣', hut: '🛖', tower: '🪨', wall: '🧱', gate: '⛩️', watch: '🗼', meat: '🍖', skewer: '🍢', fishc: '🐟', herb: '🌿', fireup: '🔥',
   fish: '🐠', berry: '🍓', rawmeat: '🥩',
@@ -276,7 +276,7 @@ export class Hud {
   renderCraft(s) {
     this.craftTab = this.craftTab || 'all';
     const list = RECIPES.filter((r) => r.show(s) && (this.craftTab === 'all' || r.cat === this.craftTab));
-    const sig = this.craftTab + list.map((r) => r.id).join() + JSON.stringify(s.inv) + s.nearFire + s.axeLevel + s.musoe + s.beomsu;
+    const sig = this.craftTab + list.map((r) => r.id + r.name).join() + JSON.stringify(s.inv) + s.nearFire + s.axeLevel + s.musoe + s.beomsu;
     if (sig === this.craftSig) return;
     this.craftSig = sig;
     const tabs = $('craft-tabs');
