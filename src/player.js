@@ -100,6 +100,26 @@ export class Player {
     for (const [k, g] of Object.entries(this.wMeshes)) g.visible = k === id;
   }
 
+  /** outfits unlocked by achievements */
+  setOutfit(id) {
+    this.outfit = id;
+    const head = this.rig.head, torso = this.rig.torso;
+    if (!this.outfitParts) {
+      const M = (c) => new THREE.MeshLambertMaterial({ color: c, flatShading: true });
+      const add = (parent, w, h, d, c, x, y, z, rz = 0) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), M(c)); m.position.set(x, y, z); m.rotation.z = rz; m.castShadow = true; parent.add(m); return m; };
+      const hatM = new THREE.MeshLambertMaterial({ color: 0x15151c, transparent: true, opacity: 0.92 });
+      const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.04, 16), hatM); brim.position.y = 0.36; head.add(brim);
+      const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.24, 0.34, 12), hatM); crown.position.y = 0.54; head.add(crown);
+      this.outfitParts = {
+        gat: [brim, crown],
+        mask: [add(head, 0.12, 0.3, 0.12, 0xe8dcc0, -0.2, 0.42, 0.05, 0.3), add(head, 0.12, 0.3, 0.12, 0xe8dcc0, 0.2, 0.42, 0.05, -0.3), add(head, 0.62, 0.12, 0.05, 0xc9413a, 0, 0.12, 0.31)],
+        dragon: [add(torso, 0.86, 0.3, 0.5, 0xd9b04a, 0, 0.18, 0), add(torso, 0.3, 0.16, 0.54, 0xf1c24b, -0.42, 0.33, 0), add(torso, 0.3, 0.16, 0.54, 0xf1c24b, 0.42, 0.33, 0)],
+      };
+    }
+    for (const [k, parts] of Object.entries(this.outfitParts)) parts.forEach((p) => { p.visible = k === id; });
+    torso.material.color.setHex(id === 'redcoat' ? 0xb0303a : 0xf6f1e4);
+  }
+
   /** leather armour: shoulder pads + belt, takes less damage */
   setArmor(on) {
     this.armor = on;

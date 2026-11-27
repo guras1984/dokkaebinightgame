@@ -14,6 +14,7 @@ import { Village } from './villagers.js';
 import { Minimap } from './minimap.js';
 import { NIGHTS, pickNight, Horde, Rain } from './events.js';
 import { XP, xpNeed, rollPerks, PERKS } from './perks.js';
+import { Meta, MONSTER_INFO, ACHIEVEMENTS, GIFTS, OUTFITS } from './meta.js';
 import { PROLOGUE, campLine } from './story.js';
 import { WEAPONS, WEAPON_ORDER, CRIT_CHANCE, CRIT_MUL, weaponDmg, weaponChop } from './weapons.js';
 import { sfx, unlock, ambience, music, isMuted, setMuted, audioState } from './sound.js';
@@ -79,6 +80,7 @@ const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
 };
+const meta = new Meta();
 function showBest() {
   const b = parseInt(store.get('dokkaebi.best') || '0', 10);
   $('best').textContent = b > 0 ? `최고 기록: ${b}일 밤` : '';
@@ -128,10 +130,77 @@ function showContinue() {
 }
 showContinue();
 
+// ---------- title: bestiary / achievements / outfits / start gift ----------
+const MONSTER_PIC = { dokkaebi: '👹', wisp: '🔵', elite: '👺', centipede: '🐛', fox: '🦊', shadow: '👤', bulgasari: '🐻', boss: '👑', imugi: '🐍', dragon: '🐉' };
+function showGifts() {
+  const row = $('gift-row');
+  const gifts = meta.gifts();
+  if (!gifts.length) { row.innerHTML = ''; return; }
+  row.innerHTML = '<span>시작 선물:</span>';
+  for (const id of [null, ...gifts]) {
+    const b = document.createElement('button');
+    b.className = 'gift' + ((meta.gift || null) === id ? ' on' : '');
+    b.textContent = id ? GIFTS[id].name : '없음';
+    b.onclick = () => { meta.setGift(id); showGifts(); };
+    row.appendChild(b);
+  }
+}
+let metaTab = 'dex';
+function showMeta(tab) {
+  metaTab = tab;
+  $('meta-screen').hidden = false;
+  const tabs = $('meta-tabs');
+  tabs.innerHTML = '';
+  for (const [id, label] of [['dex', '📖 도감'], ['ach', '🏆 업적'], ['outfit', '👘 옷']]) {
+    const t = document.createElement('button');
+    t.className = 'ctab' + (id === tab ? ' on' : '');
+    t.textContent = label;
+    t.onclick = () => showMeta(id);
+    tabs.appendChild(t);
+  }
+  const list = $('meta-list');
+  list.innerHTML = '';
+  const row = (pic, title, sub, right, cls = '') => {
+    const d = document.createElement('div');
+    d.className = 'mrow ' + cls;
+    d.innerHTML = `<span class="pic">${pic}</span><div><b>${title}</b><small>${sub}</small></div><em>${right}</em>`;
+    list.appendChild(d);
+    return d;
+  };
+  if (tab === 'dex') {
+    const n = MONSTER_INFO.filter((m) => dex[m.id]).length;
+    row('📖', `${n} / ${MONSTER_INFO.length}칸`, '만나면 도감에 기록된다', '');
+    for (const m of MONSTER_INFO) {
+      const d = dex[m.id];
+      if (d) row(MONSTER_PIC[m.id], m.name, m.desc, `${d.kills || 0}마리`);
+      else row('❔', '???', '아직 만나지 못했다', '', 'locked');
+    }
+  } else if (tab === 'ach') {
+    row('🌙', `최고 기록 ${meta.life.bestNight}일 밤`, `물리친 요괴 ${meta.life.kills}마리 · 대장 ${meta.life.bosses} · 백귀야행 ${meta.life.hordes}`, '');
+    for (const a of ACHIEVEMENTS) {
+      const r = a.reward;
+      const reward = [r.gift && `🎁 ${GIFTS[r.gift].name}`, r.outfit && `👘 ${OUTFITS[r.outfit].name}`].filter(Boolean).join(' · ');
+      row(meta.done[a.id] ? '🏆' : '🔒', a.name, `${a.desc}<br>${reward}`, meta.done[a.id] ? '달성' : '', meta.done[a.id] ? '' : 'locked');
+    }
+  } else {
+    const own = meta.outfits();
+    for (const [id, o] of Object.entries(OUTFITS)) {
+      const has = own.includes(id);
+      const d = row(has ? '👘' : '🔒', o.name, has ? o.desc : '업적을 달성하면 열린다', meta.outfit === id ? '입는 중' : '', (has ? 'pick' : 'locked') + (meta.outfit === id ? ' on' : ''));
+      if (has) d.onclick = () => { meta.setOutfit(id); player.setOutfit(id); showMeta('outfit'); };
+    }
+  }
+}
+document.querySelectorAll('[data-meta]').forEach((b) => { b.onclick = () => showMeta(b.dataset.meta); });
+$('meta-close').onclick = () => { $('meta-screen').hidden = true; };
+showGifts();
+player.setOutfit(meta.outfits().includes(meta.outfit) ? meta.outfit : 'basic');
+
 function startGame(save = null) {
   if (save instanceof Event) save = null;
   unlock();
   player.reset();
+  player.setOutfit(meta.outfits().includes(meta.outfit) ? meta.outfit : 'basic');
   player.perks = [];
   pendingLevels = 0;
   monsters.reset();
@@ -183,6 +252,14 @@ function startGame(save = null) {
     hud.banner(`${day}일째 아침`, '이어서 버텨라', 2.6);
     return;
   }
+  // start gift (unlocked by achievements) and outfit
+  const gift = meta.gift && meta.gifts().includes(meta.gift) ? meta.gift : null;
+  if (gift === 'wood10') player.inv.wood += 10;
+  if (gift === 'ironAxe') player.setAxe(1);
+  if (gift === 'charm2') player.inv.charm += 2;
+  if (gift === 'traps') player.inv.trap += 3;
+  if (gift === 'armor') player.setArmor(true);
+  if (gift === 'torch3') player.inv.torch += 3;
   saveGame(); // morning of day 1 is a checkpoint too
   const intro = () => {
     hud.banner('1일째 아침', '백 일 밤을 버텨라', 2.6);
@@ -195,6 +272,14 @@ function startGame(save = null) {
 
 // ---------- experience & level-up ----------
 let pendingLevels = 0;
+/** achievements: check after anything that can finish one */
+function checkAch() {
+  for (const a of meta.check(dex)) {
+    const r = a.reward;
+    const what = [r.gift && `시작 선물 "${GIFTS[r.gift].name}"`, r.outfit && `옷 "${OUTFITS[r.outfit].name}"`].filter(Boolean).join(', ');
+    setTimeout(() => { hud.banner(`🏆 업적: ${a.name}`, `${what} 얻음!`, 3); sfx('chest'); }, 1500);
+  }
+}
 let nightStats = { kills: 0, hurt: 0, broken: 0 };
 function gainXp(n) {
   player.xp += n;
@@ -277,6 +362,8 @@ function endGame(won) {
 /** dawn: the night is over, roll into the next day */
 function newDay() {
   const survived = day;
+  meta.best('bestNight', survived);
+  checkAch();
   const lastNight = { type: tonight, hordeWon: horde.done };
   monsters.banishAll();
   eyes.clear();
@@ -358,6 +445,7 @@ $('quit-btn').onclick = () => {
   $('pause-screen').hidden = true;
   $('title-screen').hidden = false;
   showContinue();
+  showGifts();
   hud.show(false);
   showControls(false);
 };
@@ -569,7 +657,11 @@ function damageMonster(m, base, { fromX = player.pos.x, fromZ = player.pos.z, kb
 function onMonsterKilled(m, by) {
   if (m.illusion) { hud.popup('환영이었다!', { x: m.pos.x, y: 2.2, z: m.pos.z }, camera.cam, 'water big'); return; }
   player.stats.kills += 1;
+  meta.bump('kills');
+  if (m.type === 'boss') meta.bump('bosses');
+  if (m.type === 'imugi' || m.type === 'dragon') meta.bump('imugi');
   seen(m.type);
+  checkAch();
   gainXp(XP[m.type] || 10);
   nightStats.kills += 1;
   hud.popup(by ? `${by}!` : m.type === 'elite' ? '큰 도깨비를 물리쳤다!' : '물리쳤다!', { x: m.pos.x, y: 2.6, z: m.pos.z }, camera.cam, 'fire big');
@@ -906,6 +998,7 @@ function updateVillage(dt, c, darkness) {
       sfx('craft'); sfx('dawn');
       effects.spawn(v.pos.x, 1.2, v.pos.z, 0xffe27a, { n: 20, speed: 2.5, up: 5, life: 1, size: 0.13, grav: 4 });
       hud.banner(`${v.def.name} 합류!`, v.def.perk, 3);
+      if (village.inCamp.length === 4) { meta.bump('rescuedAll'); checkAch(); }
       setTimeout(() => {
         if (state === 'playing') talk(v.def.join.map((text) => ({ who: v.def.name, role: v.def.role, text })));
       }, 1200);
@@ -1204,6 +1297,7 @@ function tick(dt) {
     hud.banner('백귀야행을 막아냈다!', '요괴들이 물러갔다. 큰 보상!', 3.2);
     sfx('dawn');
     player.stats.hordes = (player.stats.hordes || 0) + 1;
+    meta.bump('hordes'); checkAch();
     gain('bead', 6, { x: player.pos.x, y: 1.4, z: player.pos.z }, 300);
     gain('charm', 1, { x: player.pos.x, y: 1.4, z: player.pos.z }, 600);
     camp.spawnChest('night', 4, 8);

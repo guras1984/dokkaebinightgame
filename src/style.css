@@ -485,3 +485,23 @@ html, body {
 #sum-reward { color: #ffe1a1 !important; font-weight: 900; font-size: 16px !important; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 #summary, #levelup { animation: fadeIn .3s ease-out; }
+
+/* title: meta buttons, gifts, bestiary/achievements/outfits */
+.title-row { display: flex; gap: 6px; justify-content: center; margin-top: 12px; }
+.panel .chip-btn, .panel .gift { display: inline-block; width: auto; margin: 0; padding: 8px 12px; border-radius: 999px; border: 1px solid var(--panel-line); background: rgba(255,255,255,.06); color: var(--ink); font-family: inherit; font-weight: 800; font-size: 13px; }
+.gift-row { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; align-items: center; margin-top: 10px; font-size: 12px; color: var(--ink-dim); }
+.panel .gift.on { background: #ffd27a; color: var(--accent-ink); border-color: #ffd27a; }
+.meta-panel { width: min(460px, 100%); max-height: 86vh; display: flex; flex-direction: column; text-align: left; }
+.meta-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+#meta-tabs { flex: 1; display: flex; gap: 6px; }
+#meta-list { overflow-y: auto; display: grid; gap: 8px; }
+.mrow { display: grid; grid-template-columns: 44px 1fr auto; gap: 10px; align-items: center; padding: 10px; border-radius: 12px; background: rgba(255,255,255,.06); }
+.mrow .pic { font-size: 26px; text-align: center; }
+.mrow b { display: block; font-size: 14px; }
+.mrow small { display: block; font-size: 11px; color: var(--ink-dim); line-height: 1.4; }
+.mrow em { font-style: normal; font-size: 12px; font-weight: 800; color: #ffd27a; }
+.mrow.locked { opacity: .5; }
+.mrow.pick { cursor: pointer; }
+.mrow.on { outline: 2px solid #ffd27a; }
+.meta-panel .ctab, .meta-panel .icon-btn { display: inline-block; width: auto; margin: 0; }
+.meta-panel .icon-btn { flex-shrink: 0; }
