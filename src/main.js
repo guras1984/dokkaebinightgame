@@ -112,14 +112,15 @@ document.querySelectorAll('.mode-pick button').forEach((b) => {
 });
 showMode();
 
-// ---------- save: written every dawn, removed when you fall ----------
+// ---------- save: kept on the phone, written often (dawn, pause, leaving the app, every 45 s) ----------
+// Rule for updates: new fields must have defaults when loading, so an old save keeps working after an update.
 const SAVE_KEY = 'dokkaebi.save';
 function readSave() {
-  try { const d = JSON.parse(store.get(SAVE_KEY) || 'null'); return d && d.v === 1 ? d : null; } catch { return null; }
+  try { const d = JSON.parse(store.get(SAVE_KEY) || 'null'); return d && d.v >= 1 ? d : null; } catch { return null; }
 }
 function saveGame() {
   store.set(SAVE_KEY, JSON.stringify({
-    v: 1, day, mode, seed: world.seed, explored: minimap.serialize(), inv: player.inv, ironAxe: player.ironAxe, axeLevel: player.axeLevel, armor: player.armor, hp: Math.round(player.hp),
+    v: 1, day, mode, t: +daynight.time.toFixed(1), pos: [+player.pos.x.toFixed(2), +player.pos.z.toFixed(2)], seed: world.seed, explored: minimap.serialize(), inv: player.inv, ironAxe: player.ironAxe, axeLevel: player.axeLevel, armor: player.armor, hp: Math.round(player.hp),
     villagers: village.inCamp.map((p) => p.def.id), level: player.level, xp: player.xp, perks: player.perks || [], pearls: player.pearls || 0, dog: dog.tamed, weapons: player.weapons, weapon: player.weapon, sandals: !!player.sandals, rod: !!player.rod,
     water: Math.round(player.water), food: Math.round(player.food),
     fireLv: world.fire.level, fuel: Math.round(world.fire.fuel), stats: player.stats, camp: camp.serialize(),
@@ -130,7 +131,11 @@ function showContinue() {
   const d = readSave();
   const b = $('continue-btn');
   b.hidden = !d;
-  if (d) b.textContent = `이어하기 · ${d.day}일째 아침`;
+  if (d) {
+    const t = d.t || 0;
+    const when = t < rules.dayLength ? '낮' : t < rules.dayLength + rules.duskLength ? '해질녘' : '밤';
+    b.textContent = `이어하기 · ${d.day}일째 ${when}`;
+  }
   $('start-btn').textContent = d ? '처음부터' : '첫째 날 시작';
   $('start-btn').className = d ? 'ghost' : 'primary';
 }
@@ -199,6 +204,8 @@ function showMeta(tab) {
 }
 document.querySelectorAll('[data-meta]').forEach((b) => { b.onclick = () => showMeta(b.dataset.meta); });
 $('meta-close').onclick = () => { $('meta-screen').hidden = true; };
+// tapping outside a panel closes it (phones: closing buttons are small)
+$('meta-screen').addEventListener('pointerdown', (e) => { if (e.target.id === 'meta-screen') $('meta-screen').hidden = true; });
 showGifts();
 player.setOutfit(meta.outfits().includes(meta.outfit) ? meta.outfit : 'basic');
 
@@ -261,7 +268,9 @@ function startGame(save = null) {
     world.setFireLevel(save.fireLv);
     world.fire.fuel = save.fuel;
     camp.restore(save.camp);
-    hud.banner(`${day}일째 아침`, '이어서 버텨라', 2.6);
+    daynight.time = save.t || 0;
+    if (save.pos) { player.pos.set(save.pos[0], 0, save.pos[1]); world.resolve(player.pos, 0.42); camera.snap(player.pos); }
+    hud.banner(`${day}일째`, '이어서 버텨라', 2.6);
     return;
   }
   // start gift (unlocked by achievements) and outfit
@@ -284,6 +293,7 @@ function startGame(save = null) {
 
 // ---------- experience & level-up ----------
 let pendingLevels = 0;
+let autoSaveT = 45;
 /** achievements: check after anything that can finish one */
 function checkAch() {
   for (const a of meta.check(dex)) {
@@ -322,6 +332,8 @@ function talk(lines, done) {
   hud.say(lines, () => { state = 'playing'; input.clear(); if (done) done(); });
 }
 $('dialog').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); unlock(); hud.dialogNext(); });
+// tap anywhere on the screen moves the dialogue on
+$('dialog-catch').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); hud.dialogNext(); });
 
 function spawnDayChests(first) {
   // the first morning puts one chest close by so the player finds it
@@ -338,6 +350,7 @@ function showControls(on) {
 
 function setPaused(p) {
   if (state === 'over' || state === 'title' || state === 'talk') return;
+  if (p && state === 'playing') saveGame();
   state = p ? 'paused' : 'playing';
   $('pause-screen').hidden = !p;
   input.clear();
@@ -467,6 +480,8 @@ const showMute = () => { muteBtn.textContent = isMuted() ? '소리 켜기' : '�
 showMute();
 muteBtn.onclick = () => { unlock(); setMuted(!isMuted()); showMute(); };
 $('resume-btn').onclick = () => setPaused(false);
+$('pause-screen').addEventListener('pointerdown', (e) => { if (e.target.id === 'pause-screen') setPaused(false); });
+$('summary').addEventListener('pointerdown', (e) => { if (e.target.id === 'summary') $('sum-btn').onclick(); });
 $('quit-btn').onclick = () => {
   state = 'title';
   $('pause-screen').hidden = true;
@@ -478,6 +493,10 @@ $('quit-btn').onclick = () => {
 };
 if (params.get('nopause') !== '1') {
   document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'playing') setPaused(true); });
+}
+// leaving or hiding the app always saves (even in test mode)
+for (const ev of ['visibilitychange', 'pagehide']) {
+  addEventListener(ev, () => { if ((document.hidden || ev === 'pagehide') && ['playing', 'paused'].includes(state)) saveGame(); });
 }
 if (params.get('tune') === '1') buildTunePanel();
 
@@ -1392,6 +1411,8 @@ function tick(dt) {
   music.setMood(fighting ? 'battle' : darkness > 0.5 ? 'night' : 'day');
   music.update();
   maybeLevelUp();
+  autoSaveT -= dt;
+  if (autoSaveT <= 0 && !player.dead) { autoSaveT = 45; saveGame(); }
   const goal = currentGoal(phase, inLight, c.fireR);
   hud.setGoal(goal, player.pos, camera.cam);
   minimap.update(dt, { player, world, camp, village, monsters: monsters.alive, darkness, goal: goal && goal.target });

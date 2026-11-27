@@ -49,6 +49,8 @@ export class Hud {
     });
     this.el.craftBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); this.input.pressed.add('craft'); });
     $('craft-close').addEventListener('pointerdown', (e) => { e.preventDefault(); this.input.pressed.add('craft'); });
+    // tap anywhere outside the craft window closes it
+    $('craft-backdrop').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); this.setCraft(false); });
     this.craftOpen = false;
     this.craftSig = '';
   }
@@ -204,6 +206,7 @@ export class Hud {
   say(lines, done) {
     this.dlg = { lines, i: -1, done, typing: false, shown: 0 };
     $('dialog').hidden = false;
+    $('dialog-catch').hidden = false;
     this.dialogNext();
   }
 
@@ -216,6 +219,7 @@ export class Hud {
     d.i += 1;
     if (d.i >= d.lines.length) {
       $('dialog').hidden = true;
+      $('dialog-catch').hidden = true;
       this.dlg = null;
       if (d.done) d.done();
       return;
@@ -258,6 +262,7 @@ export class Hud {
   setCraft(open) {
     this.craftOpen = open;
     this.el.craft.hidden = !open;
+    $('craft-backdrop').hidden = !open;
     this.craftSig = '';
   }
 

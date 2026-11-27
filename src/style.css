@@ -505,3 +505,38 @@ html, body {
 .mrow.on { outline: 2px solid #ffd27a; }
 .meta-panel .ctab, .meta-panel .icon-btn { display: inline-block; width: auto; margin: 0; }
 .meta-panel .icon-btn { flex-shrink: 0; }
+
+/* ---------- compact HUD (one stat card) ---------- */
+.stat-card {
+  pointer-events: none; display: grid; gap: 5px; padding: 7px 10px 8px; border-radius: 14px;
+  background: var(--panel); border: 1px solid var(--panel-line); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+.sc-row { display: flex; align-items: center; gap: 8px; }
+.stat-card .hp { position: relative; padding-bottom: 4px; }
+.stat-card .lv { font-size: 13px; font-weight: 900; color: #ffd27a; min-width: 34px; }
+.stat-card .hp .bar { width: 112px; height: 10px; }
+.stat-card .xpline { left: 42px; right: 0; bottom: 0; }
+.stat-card .need { display: inline-flex; align-items: center; gap: 4px; padding: 0; background: none; border: 0; border-radius: 6px; }
+.stat-card .need.low { padding: 1px 4px; }
+.stat-card .bar.tiny { width: 50px; height: 6px; display: inline-block; }
+.stat-card .mats { gap: 10px; }
+.stat-card .res { display: inline-flex; align-items: center; gap: 4px; padding: 0; background: none; border: 0; backdrop-filter: none; -webkit-backdrop-filter: none; font-size: 13px; font-weight: 800; }
+.stat-card .res b { font-size: 13px; min-width: 0; }
+.stat-card .res-icon { width: 14px; height: 14px; }
+.clock { gap: 8px; }
+.clock-fire { display: inline-flex; align-items: center; gap: 4px; padding-left: 8px; border-left: 1px solid var(--panel-line); }
+.clock-fire .bar.small { width: 46px; height: 7px; display: inline-block; }
+.clock-fire .res-icon { width: 13px; height: 13px; }
+#craft-backdrop, #dialog-catch { position: absolute; inset: 0; z-index: 3; }
+#dialog-catch { z-index: 5; }
+@media (max-width: 430px) {
+  .stat-card .hp .bar { width: 96px; }
+  .stat-card .bar.tiny { width: 42px; }
+  #minimap { top: calc(128px + var(--safe-t)); }
+  #toast { top: calc(150px + var(--safe-t)); }
+}
+.stat-card .hp { background: none; border: 0; padding: 0 0 4px; border-radius: 0; backdrop-filter: none; -webkit-backdrop-filter: none; }
+@media (max-width: 430px) {
+  #minimap { top: calc(180px + var(--safe-t)); }
+  #toast { top: calc(200px + var(--safe-t)); max-width: 62vw; }
+}

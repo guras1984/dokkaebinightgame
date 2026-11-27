@@ -22,33 +22,36 @@
     <!-- HUD -->
     <div id="hud" hidden>
       <div class="hud-left">
-        <div class="hp">
-          <span class="hp-label" id="lv-label">Lv 1</span>
-          <div class="bar"><i id="hp-fill"></i></div>
-          <i class="xpline"><i id="xp-fill"></i></i>
-        </div>
-        <div class="needs">
-          <div class="need" id="need-water"><span class="need-icon water"></span><div class="bar tiny"><i id="water-fill"></i></div></div>
-          <div class="need" id="need-food"><span class="need-icon food"></span><div class="bar tiny"><i id="food-fill"></i></div></div>
-          <div class="need torch" id="need-torch" hidden><span class="item-icon torch mini"></span><b id="torch-time">0</b></div>
-        </div>
-        <div class="res-row">
-          <div class="res" data-kind="wood"><span class="res-icon wood"></span><b id="res-wood">0</b></div>
-          <div class="res" data-kind="stone"><span class="res-icon stone"></span><b id="res-stone">0</b></div>
-          <div class="res" data-kind="bead"><span class="res-icon bead"></span><b id="res-bead">0</b></div>
+        <!-- one card: level + health, water/food, materials -->
+        <div class="stat-card">
+          <div class="sc-row hp">
+            <b class="lv" id="lv-label">Lv 1</b>
+            <div class="bar"><i id="hp-fill"></i></div>
+            <i class="xpline"><i id="xp-fill"></i></i>
+          </div>
+          <div class="sc-row">
+            <span class="need" id="need-water"><span class="need-icon water"></span><span class="bar tiny"><i id="water-fill"></i></span></span>
+            <span class="need" id="need-food"><span class="need-icon food"></span><span class="bar tiny"><i id="food-fill"></i></span></span>
+            <span class="need torch" id="need-torch" hidden><span class="item-icon torch mini"></span><b id="torch-time">0</b></span>
+          </div>
+          <div class="sc-row mats">
+            <span class="res" data-kind="wood"><span class="res-icon wood"></span><b id="res-wood">0</b></span>
+            <span class="res" data-kind="stone"><span class="res-icon stone"></span><b id="res-stone">0</b></span>
+            <span class="res" data-kind="bead"><span class="res-icon bead"></span><b id="res-bead">0</b></span>
+          </div>
         </div>
       </div>
       <div class="hud-center">
         <div class="clock" id="clock">
           <span class="clock-icon" id="clock-icon">☀</span>
           <span class="clock-text" id="clock-text">낮</span>
-          <div class="clock-bar"><i id="clock-fill"></i></div>
+          <span class="clock-fire"><span class="res-icon flame"></span><span class="bar small"><i id="fire-fill"></i></span></span>
+          <i id="clock-fill" hidden></i>
         </div>
         <div id="goal" hidden><span id="goal-arrow">➤</span><span id="goal-text"></span></div>
         <div id="boss-bar" hidden><span id="boss-name">도깨비 대장</span><div class="bar"><i id="boss-fill"></i></div></div>
       </div>
       <div class="hud-right">
-        <div class="res fire"><span class="res-icon flame"></span><div class="bar small"><i id="fire-fill"></i></div></div>
         <button id="btn-craft" class="craft-btn" aria-label="만들기">🔨<span>만들기</span></button>
         <button id="pause-btn" class="icon-btn" aria-label="일시정지">Ⅱ</button>
       </div>
@@ -61,6 +64,7 @@
     <div id="night-intro" hidden><b id="ni-title">밤이 왔다</b><small id="ni-sub"></small></div>
     <div id="banner"><small id="banner-sub"></small><b id="banner-text"></b></div>
     <div id="toast" aria-live="polite"></div>
+    <div id="dialog-catch" hidden></div>
     <div id="dialog" hidden>
       <div class="dlg-name"><b id="dlg-name"></b><small id="dlg-role"></small></div>
       <p id="dlg-text"></p>
@@ -81,6 +85,7 @@
     </div>
     <div id="keys-hint" hidden>WASD 이동 · J 행동 · K 구르기 · Q 무기 · 1~9 아이템 · C 만들기 · P 멈춤</div>
 
+    <div id="craft-backdrop" hidden></div>
     <section id="craft" hidden>
       <div class="craft-head"><b>만들기</b><span class="craft-sub">어디서나 · 누르면 바로 만들어요</span><button id="craft-close" class="icon-btn" aria-label="닫기">✕</button></div>
       <div id="craft-tabs"></div>
