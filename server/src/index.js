@@ -57,6 +57,9 @@ export default {
   },
 };
 
+// bump when the room rules change (clock speed, messages): older apps reload themselves before playing
+const PROTO = 2;
+
 export class Lobby {
   constructor(state) { this.state = state; }
   async fetch(req) {
@@ -213,7 +216,7 @@ export class Room {
     const me = { c, id: pid, name: NICK_OK.test(nick) ? nick : '도깨비 사냥꾼', look: url.searchParams.get('look') || 'basic', x: 0, z: 2.4, f: 0, s: 0, hp: 100, seen: Date.now(), moved: Date.now() };
     server.serializeAttachment(me);
     const sim = await this.ensureSim();
-    server.send(JSON.stringify({ t: 'welcome', you: me.id, c: me.c, room: { code: m.code, name: m.name, locked: !!m.pwHash }, seed: m.seed, startDay: m.startDay, start: m.start, now: Date.now(), players: this.players().filter((p) => p.id !== me.id) }));
+    server.send(JSON.stringify({ t: 'welcome', v: PROTO, you: me.id, c: me.c, room: { code: m.code, name: m.name, locked: !!m.pwHash }, seed: m.seed, startDay: m.startDay, start: m.start, now: Date.now(), players: this.players().filter((p) => p.id !== me.id) }));
     if (sim) server.send(JSON.stringify(sim.welcome()));
     this.broadcast({ t: 'join', p: me }, server);
     await this.report();

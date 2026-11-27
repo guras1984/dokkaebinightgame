@@ -175,6 +175,7 @@ setupInstall();
 const friends = new Friends(scene, $('tags'));
 const CYCLE = () => rules.dayLength + rules.duskLength + rules.nightLength;
 /** the room's shared clock → day and time of day */
+const MP_PROTO = 2;   // must match PROTO in server/src/index.js
 function mpClock() {
   const el = Math.max(0, (mp.net.now() - mp.start) / 1000) * rules.mpSpeed;
   return { day: mp.startDay + Math.floor(el / CYCLE()), time: el % CYCLE() };
@@ -332,6 +333,14 @@ async function joinRoom(code, pw) {
   const net = new Net();
   bindNet(net);
   const w = await net.join(code, pw, meta.outfit);
+  // an older copy of the game (cached on the phone) would drift from friends: update first, then join again
+  if ((w.v || 1) !== MP_PROTO) {
+    net.leave();
+    hud.toast('게임이 새로 바뀌었어요. 다시 여는 중…', 3);
+    const u = new URL(location.href); u.searchParams.set('room', code); if (pw) u.searchParams.set('lock', '1');
+    setTimeout(() => location.replace(u), 800);
+    return;
+  }
   mp = { net, code, pw, seed: w.seed, startDay: w.startDay, start: w.start, room: w.room, sendT: 0 };
   friends.clear();
   for (const p of w.players) friends.add(p);
@@ -386,7 +395,9 @@ function leaveRoom(toTitle = false) {
 /** every frame while together: follow the room clock, send where I am, draw friends */
 function mpTick(dt) {
   const ck = mpClock();
-  if (ck.day > day) { day = ck.day - 1; newDay(); }
+  // together: only the room clock moves the day (the phone's own dawn is ignored), so everyone stays on the same day
+  if (ck.day > day) { day = ck.day - 1; newDay(); daynight.time = ck.time; }
+  else if (ck.day < day) day = ck.day;
   if (Math.abs(daynight.time - ck.time) > 1.5) daynight.time = ck.time;
   mp.sendT -= dt;
   if (mp.sendT <= 0 && mp.net.open) {
@@ -1606,20 +1617,25 @@ function tick(dt) {
   input.update();
 
   if (input.consume('pause')) setPaused(mp ? !menuOpen() : state === 'playing');
+  // together: nothing stops the world (friends keep playing) — night result, level-up and story just sit on top
+  const mpOverlay = !!mp && (state === 'levelup' || state === 'summary' || state === 'talk');
   if (state === 'levelup' || state === 'summary') {
     if (state === 'summary' && input.consume('action')) $('sum-btn').onclick();
-    input.pressed.clear(); renderer.render(scene, camera.cam); return;
+    input.pressed.clear();
+    if (!mpOverlay) { renderer.render(scene, camera.cam); return; }
   }
   if (state === 'talk') {
-    // reading: the world holds still; action / tap moves the dialogue on
+    // reading: (solo) the world holds still; action / tap moves the dialogue on
     if (input.consume('action')) hud.dialogNext();
     if (hud.dlg && hud.dlg.typing) hud.typeTick(dt);
     input.pressed.clear();
-    camera.update(dt, player.pos, tmp.set(0, 0, 0));
-    renderer.render(scene, camera.cam);
-    return;
+    if (!mpOverlay) {
+      camera.update(dt, player.pos, tmp.set(0, 0, 0));
+      renderer.render(scene, camera.cam);
+      return;
+    }
   }
-  if (state !== 'playing') {
+  if (state !== 'playing' && !mpOverlay) {
     input.pressed.clear();
     music.setMood(state === 'paused' ? 'off' : 'day');
     music.update();
@@ -1924,7 +1940,7 @@ function tick(dt) {
     sfx('dawn');
   }
   if (player.dead && !mp) { endGame(false); }
-  else if (phase === 'dawn') newDay();
+  else if (phase === 'dawn' && !mp) newDay();   // together: the room clock decides dawn (mpTick)
 
   const lead = tmp.set(player.vel.x, 0, player.vel.z).multiplyScalar(1 / Math.max(1, tune.moveSpeed));
   camera.update(dt, player.pos, lead);
@@ -1993,3 +2009,25 @@ window.__game = {
     pos: [+player.pos.x.toFixed(2), +player.pos.z.toFixed(2)], trees: world.trees.filter((t) => t.alive).length, rocks: world.rocks.filter((r) => r.alive).length,
   }),
 };
+
+// ---------- iPhone: the game screen must never zoom ----------
+// Older iPhones (home button, iOS 15/16) ignore "user-scalable=no" in home-screen apps: block pinch and double-tap,
+// and if a zoom still slips through, snap back to normal size.
+for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
+{
+  let lastEnd = 0;
+  document.addEventListener('touchend', (e) => {
+    const now = Date.now();
+    if (now - lastEnd < 320 && !/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) e.preventDefault();   // 2nd tap of a double-tap
+    lastEnd = now;
+  }, { passive: false });
+  const vp = document.querySelector('meta[name=viewport]');
+  const base = vp ? vp.content : '';
+  const unzoom = () => {
+    if (!vp || !window.visualViewport || visualViewport.scale <= 1.01) return;
+    vp.content = base + ',minimum-scale=1';
+    requestAnimationFrame(() => { vp.content = base; window.scrollTo(0, 0); });
+  };
+  if (window.visualViewport) visualViewport.addEventListener('resize', () => setTimeout(unzoom, 300));
+  document.addEventListener('focusout', () => setTimeout(unzoom, 200));
+}
