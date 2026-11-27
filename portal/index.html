@@ -3,52 +3,52 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <meta name="theme-color" content="#0d1430" />
+  <meta name="theme-color" content="#bfe6ff" />
   <title>뚝 · 뚝딱 만든 게임들</title>
   <meta name="description" content="도깨비 방망이 휘두르듯 뚝딱 만든 게임 모음. 첫 게임: 도깨비 밤" />
   <link rel="icon" type="image/png" href="./icon-192.png" />
   <link rel="apple-touch-icon" href="./icon-192.png" />
   <style>
     :root {
-      --bg: #0d1430; --bg2: #1a1440; --card: rgba(255, 255, 255, .06); --line: rgba(255, 255, 255, .12);
-      --ink: #fff8ea; --dim: rgba(255, 248, 234, .68); --gold: #ffd27a; --gold2: #ffa53a; --green: #8fe08a;
+      --card: rgba(255, 255, 255, .82); --line: rgba(120, 90, 40, .14);
+      --ink: #3a2a1a; --dim: #7a6650; --gold: #ffc94a; --gold2: #ff9a2e; --green: #4caf50;
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body { margin: 0; min-height: 100%; }
     body {
-      background: radial-gradient(ellipse at 50% -10%, #3a2a5a 0%, var(--bg2) 35%, var(--bg) 75%) fixed;
+      background: radial-gradient(circle at 85% 4%, #fff6c8 0 60px, rgba(255,246,200,0) 160px), linear-gradient(180deg, #bfe6ff 0%, #e6f6ff 38%, #fff6e2 72%, #ffe9c9 100%) fixed;
       color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
       padding: calc(20px + env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom));
     }
     main { max-width: 720px; margin: 0 auto; }
     header { text-align: center; padding: 18px 0 22px; }
-    .logo { font-size: 64px; font-weight: 900; letter-spacing: .04em; color: var(--gold); text-shadow: 0 4px 0 #7a3a10, 0 0 28px rgba(255, 170, 60, .45); line-height: 1; }
+    .logo { font-size: 64px; font-weight: 900; letter-spacing: .04em; color: #ff8a1f; text-shadow: 0 4px 0 #b4520c, 0 8px 18px rgba(255, 140, 40, .35); line-height: 1; }
     .logo small { display: block; font-size: 15px; letter-spacing: .3em; color: var(--dim); text-shadow: none; margin-top: 8px; font-weight: 800; }
     .tagline { margin: 14px 0 0; color: var(--dim); font-size: 15px; line-height: 1.6; }
     h2 { font-size: 15px; color: var(--dim); letter-spacing: .12em; margin: 26px 4px 10px; }
     .game {
       display: grid; grid-template-columns: 112px 1fr; gap: 16px; align-items: center; padding: 16px; border-radius: 22px;
-      background: var(--card); border: 1px solid var(--line); box-shadow: 0 10px 30px rgba(0, 0, 0, .25);
+      background: var(--card); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(90, 60, 20, .12);
     }
-    .game img { width: 112px; height: 112px; border-radius: 24px; box-shadow: 0 6px 18px rgba(0, 0, 0, .45); }
+    .game img { width: 112px; height: 112px; border-radius: 24px; box-shadow: 0 6px 16px rgba(60, 40, 20, .3); }
     .game h3 { margin: 0 0 4px; font-size: 24px; }
     .game p { margin: 0 0 10px; color: var(--dim); font-size: 14px; line-height: 1.55; }
     .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-    .tags span { font-size: 11px; font-weight: 800; padding: 4px 9px; border-radius: 999px; background: rgba(255, 210, 122, .14); color: #ffe1a1; }
-    .tags span.new { background: rgba(143, 224, 138, .18); color: #d8ffd4; }
+    .tags span { font-size: 11px; font-weight: 800; padding: 4px 9px; border-radius: 999px; background: #fff0cc; color: #9a5a00; }
+    .tags span.new { background: #dcf5d6; color: #2e7d32; }
     .play {
       display: inline-flex; align-items: center; gap: 8px; padding: 13px 22px; border-radius: 14px; text-decoration: none; font-weight: 900; font-size: 17px;
       background: linear-gradient(180deg, var(--gold), var(--gold2)); color: #3a1d00; box-shadow: 0 4px 0 #a5560f;
     }
     .play:active { transform: translateY(3px); box-shadow: 0 1px 0 #a5560f; }
-    .soon { opacity: .55; grid-template-columns: 112px 1fr; }
-    .soon .ph { width: 112px; height: 112px; border-radius: 24px; display: grid; place-items: center; font-size: 46px; background: rgba(255, 255, 255, .05); border: 2px dashed var(--line); }
+    .soon { opacity: .7; grid-template-columns: 112px 1fr; }
+    .soon .ph { width: 112px; height: 112px; border-radius: 24px; display: grid; place-items: center; font-size: 46px; background: #f3efe6; border: 2px dashed rgba(120,90,40,.25); }
     .news { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
     .news li { padding: 12px 14px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); font-size: 14px; line-height: 1.55; }
-    .news b { color: var(--gold); margin-right: 6px; }
+    .news b { color: #e07a10; margin-right: 6px; }
     .howto { padding: 14px 16px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); font-size: 14px; line-height: 1.7; color: var(--dim); }
     .howto b { color: var(--ink); }
-    footer { text-align: center; margin-top: 30px; font-size: 12px; color: rgba(255, 248, 234, .4); }
+    footer { text-align: center; margin-top: 30px; font-size: 12px; color: #a8957a; }
     @media (max-width: 480px) {
       .logo { font-size: 54px; }
       .game { grid-template-columns: 84px 1fr; gap: 12px; padding: 14px; }
@@ -79,7 +79,7 @@
 
     <h2>곧 나올 게임</h2>
     <article class="game soon">
-      <div class="ph">❔</div>
+      <div class="ph">🎁</div>
       <div><h3>뚝딱… 만드는 중</h3><p>다음 게임은 무엇일까요?</p></div>
     </article>
 
