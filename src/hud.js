@@ -6,8 +6,8 @@ import { sfx } from './sound.js';
 const $ = (id) => document.getElementById(id);
 const RES_KINDS = ['wood', 'stone', 'bead'];
 // the big action button changes picture and colour with what it will do
-const ACTION_ICON = { '베기': '🪓', '장작 넣기': '🔥', '열기': '📦', '따기': '🍓', '물 마시기': '💧', '말 걸기': '💬', '구하기': '🔓', '고치기': '🔧', '강화': '⬆️', '낚시': '🎣', '낚시 중': '🎣', '먹이 주기': '🦴' };
-const ACTION_KIND = { '장작 넣기': 'fire', '물 마시기': 'water', '낚시': 'water', '낚시 중': 'water', '말 걸기': 'talk', '구하기': 'gold', '열기': 'gold', '따기': 'gold', '고치기': 'build', '강화': 'build', '먹이 주기': 'gold' };
+const ACTION_ICON = { '베기': '🪓', '장작 넣기': '🔥', '열기': '📦', '따기': '🍓', '물 마시기': '💧', '말 걸기': '💬', '구하기': '🔓', '고치기': '🔧', '강화': '⬆️', '낚시': '🎣', '낚시 중': '🎣', '먹이 주기': '🦴', '살리기': '💖' };
+const ACTION_KIND = { '장작 넣기': 'fire', '물 마시기': 'water', '낚시': 'water', '낚시 중': 'water', '말 걸기': 'talk', '구하기': 'gold', '열기': 'gold', '따기': 'gold', '고치기': 'build', '강화': 'build', '먹이 주기': 'gold', '살리기': 'gold' };
 // card / slot pictures (emoji draw nicely on phones)
 export const EMOJI = {
   'w-spear': '🔱', 'w-axe1': '🪓', 'w-axe2': '🪓', 'w-sword': '🗡️', 'w-mace': '🔨', 'w-bow': '🏹', arrow: '➶',

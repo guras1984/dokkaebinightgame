@@ -366,7 +366,10 @@ export class Monsters {
     }
     const events = [];
     for (const m of [...this.list]) {
-      const e = m.update(dt, ctx);
+      // together (server): each monster goes after the nearest living player
+      const c = ctx.players ? this.ctxFor(m, ctx) : ctx;
+      const e = m.update(dt, c);
+      if (e === 'foxClones' && this.puppet) continue; // a client following the server: the server makes the clones
       if (e === 'foxClones') {
         // the fox splits into look-alikes that vanish when struck
         for (const s of [-1, 1]) {
@@ -461,6 +464,19 @@ export class Monsters {
       : type === 'wisp' ? new Wisp(this.scene, x, z, diff) : new Dokkaebi(this.scene, x, z, this.count, type, diff);
     this.count++;
     return m;
+  }
+
+  /** pick the nearest living player for this monster (multiplayer) */
+  ctxFor(m, ctx) {
+    let best = null, bd = 1e9;
+    for (const p of ctx.players) {
+      if (p.dead) continue;
+      const d = Math.hypot(p.pos.x - m.pos.x, p.pos.z - m.pos.z);
+      if (d < bd) { bd = d; best = p; }
+    }
+    best = best || ctx.players[0];
+    m.target = best && best.id;
+    return Object.assign({}, ctx, { player: best });
   }
 
   /** what to spawn tonight, by the night's odds */

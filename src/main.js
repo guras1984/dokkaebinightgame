@@ -19,6 +19,8 @@ import { Dog } from './pet.js';
 import { setupInstall } from './install.js';
 import { Net, listRooms, createRoom, myNick, setNick, randomNick, EMOTES, SERVER as SERVER_URL } from './net.js';
 import { Friends } from './together.js';
+import { Fox } from './beasts.js';
+import { difficulty } from './config.js';
 import { PROLOGUE, campLine } from './story.js';
 import { WEAPONS, WEAPON_ORDER, CRIT_CHANCE, CRIT_MUL, weaponDmg, weaponChop } from './weapons.js';
 import { sfx, unlock, ambience, music, isMuted, setMuted, audioState } from './sound.js';
@@ -178,7 +180,146 @@ function mpClock() {
 }
 function readMpSave(code) { try { const d = JSON.parse(store.get('dokkaebi.mp.' + code) || 'null'); return d && d.v >= 1 ? d : null; } catch { return null; } }
 
+// ---- the room's shared world (monsters, fire, buildings) comes from the server ----
+const bySid = new Map();
+const STATE_NAMES = ['spawn', 'chase', 'windup', 'recover', 'dying', 'gone', 'orbit', 'aim', 'dash', 'dive', 'under', 'burst', 'breath'];
+const SHOWN_STATES = new Set(['windup', 'dive', 'under', 'burst', 'breath', 'aim', 'dash']);
+function serverMonster(sm) {
+  if (bySid.has(sm.sid)) return bySid.get(sm.sid);
+  const d = difficulty(Math.max(1, day));
+  const m = sm.il ? new Fox(scene, sm.x, sm.z, d, true) : monsters.create(sm.type, sm.x, sm.z, d);
+  m.sid = sm.sid; m.hp = sm.hp; m.maxHp = sm.max || sm.hp; m.horde = !!sm.ho; m.facing = sm.f || 0;
+  m.lastSeen = performance.now();
+  monsters.list.push(m);
+  bySid.set(sm.sid, m);
+  return m;
+}
+function serverStruct(sm) {
+  let st = camp.structs.find((q) => q.sid === sm.sid);
+  if (!st) { st = camp.build(sm.k, sm.x, sm.z, sm.f, null); st.sid = sm.sid; }
+  if ((sm.t || 0) !== (st.tier || 0)) camp.setTier(st, sm.t || 0);
+  if (sm.hp < st.hp) { st.shake = 1; st.hurtShow = 4; }
+  st.hp = Math.min(st.maxHp, sm.hp);
+  return st;
+}
+function onServer(msg) {
+  if (!mp) return;
+  if (state !== 'playing' && state !== 'paused' && state !== 'talk' && state !== 'levelup' && state !== 'summary') { (mp.pending = mp.pending || []).push(msg); return; }
+  const near = (x, z, r = 14) => Math.hypot(x - player.pos.x, z - player.pos.z) < r;
+  switch (msg.t) {
+    case 'b': for (const m of msg.l) onServer(m); break;
+    case 'world':
+      camp.reset();
+      for (const sm of msg.structs) serverStruct(sm);
+      world.fire.fuel = msg.fuel;
+      if (msg.lv !== world.fire.level) world.setFireLevel(msg.lv);
+      tonight = msg.tonight;
+      for (const sm of msg.monsters) serverMonster(sm);
+      break;
+    case 'spawn': serverMonster(msg.m); break;
+    case 's': {
+      const now = performance.now();
+      const seenSids = new Set();
+      for (const [sid, x, z, , st, hp] of msg.m) {
+        seenSids.add(sid);
+        const m = bySid.get(sid);
+        if (!m || !m.alive) continue;
+        const dx = x - m.pos.x, dz = z - m.pos.z;
+        if (Math.hypot(dx, dz) > 3) { m.pos.x = x; m.pos.z = z; } else { m.pos.x += dx * 0.35; m.pos.z += dz * 0.35; }
+        m.hp = hp;
+        const name = STATE_NAMES[st];
+        if (SHOWN_STATES.has(name) && name !== m.state) { m.state = name; m.t = 0; }
+        m.lastSeen = now;
+      }
+      for (const [sid, m] of bySid) if (!seenSids.has(sid) && now - m.lastSeen > 1500) { if (m.alive) m.banish(); bySid.delete(sid); }
+      world.fire.fuel = msg.fuel;
+      if (msg.lv > world.fire.level) world.setFireLevel(msg.lv);
+      if (msg.tn) tonight = msg.tn;
+      horde.active = msg.hw > 0; if (msg.hw) horde.wave = msg.hw; horde.phase = horde.active ? 'wave' : 'idle';
+      monsters.boss = msg.boss ? bySid.get(msg.boss) || null : null;
+      break;
+    }
+    case 'die': {
+      const m = bySid.get(msg.sid);
+      bySid.delete(msg.sid);
+      if (!m) break;
+      if (m.state !== 'dying' && m.state !== 'gone') { m.state = 'dying'; m.t = 0; }
+      if (msg.illusion) { hud.popup('환영이었다!', { x: m.pos.x, y: 2.2, z: m.pos.z }, camera.cam, 'water big'); break; }
+      m.beadMul = (msg.beads || 1) / (m.T.beads || 1);
+      if (msg.by === mp.net.you) onMonsterKilled(m);
+      else if (msg.by === 'trap' || msg.by === 'tower') { gain('bead', msg.beads || 1, { x: m.pos.x, y: 1.2, z: m.pos.z }, 200); gainXp(4); }
+      else { const f = friends.map.get(msg.by); if (f && near(m.pos.x, m.pos.z)) hud.popup(`${f.name}!`, { x: m.pos.x, y: 2.6, z: m.pos.z }, camera.cam, 'water big'); gainXp(3); }
+      break;
+    }
+    case 'hurt':
+      if (player.hurt(Math.max(1, Math.round(msg.dmg * M().dmg)), msg.x, msg.z)) {
+        sfx('hurt'); nightStats.hurt += player.lastDamage || 0; camera.shake = 1; hitStop = 0.07;
+        hud.popup(`-${player.lastDamage}`, { x: player.pos.x, y: 2.4, z: player.pos.z }, camera.cam, 'hurt big');
+      }
+      break;
+    case 'sadd': {
+      const st = serverStruct(msg.s);
+      if (near(st.x, st.z)) { sfx('build'); effects.spawn(st.x, 0.4, st.z, 0xd6d3cb, { n: 12, speed: 2.5, up: 3, life: 0.6, size: 0.13 }); }
+      if (msg.by === mp.net.you) player.stats.built += 1;
+      break;
+    }
+    case 'supd': serverStruct(msg.s); break;
+    case 'sdel': {
+      const st = camp.structs.find((q) => q.sid === msg.sid);
+      if (!st) break;
+      camp.destroy(st);
+      if (msg.broke) {
+        nightStats.broken += 1;
+        effects.spawn(st.x, 0.8, st.z, 0xc98a4d, { n: 22, speed: 5, up: 4, life: 0.7, size: 0.18 });
+        if (near(st.x, st.z, 20)) { sfx('rockBreak'); hud.toast(`${STRUCT[st.kind].name}이(가) 부서졌다!`, 2); }
+      }
+      break;
+    }
+    case 'deny': player.inv[msg.k] = (player.inv[msg.k] || 0) + 1; hud.toast(msg.why, 1.6); sfx('deny'); break;
+    case 'event':
+      if (msg.k === 'raid') { hud.banner('도깨비 습격!', '둥둥둥… 북소리가 들린다', 2.8, 'raid'); sfx('raid'); camera.shake = 1; }
+      else if (msg.k === 'boss') {
+        sfx('raid'); sfx('gong'); camera.shake = 1.2;
+        hud.banner(msg.type === 'imugi' ? '이무기가 솟아올랐다!' : msg.type === 'dragon' ? '용이 하늘에 올랐다!' : '도깨비 대장이 나타났다!', '모두 힘을 합쳐라!', 3, 'raid');
+      } else if (msg.k === 'horde-waveEnd') { hud.banner(`${msg.wave}번째 물결을 막았다!`, '잠깐 숨 돌리자… 곧 다음 물결', 2.6); sfx('craft'); }
+      else if (msg.k === 'horde-nextWave') { hud.banner(`경고! ${msg.wave}번째 물결`, '더 많이 몰려온다', 2.6, 'raid'); sfx('raid'); camera.shake = 0.8; }
+      else if (msg.k === 'horde-won') { hud.banner('백귀야행을 막아냈다!', '모두 함께 해냈다!', 3.2); sfx('dawn'); gain('bead', 6, { x: player.pos.x, y: 1.4, z: player.pos.z }, 300); meta.bump('hordes'); checkAch(); }
+      break;
+    case 'fx':
+      if (msg.k === 'hitFire') { effects.spawn(world.fire.x, 1, world.fire.z, 0xff7a3a, { n: 10, speed: 4, up: 3, life: 0.5, size: 0.13 }); if (near(world.fire.x, world.fire.z)) { sfx('stomp'); hud.popup('불 -4', { x: world.fire.x, y: 2.4, z: world.fire.z }, camera.cam, 'hurt big'); } }
+      else if (msg.k === 'fireSlam') { camera.shake = 1; sfx('stomp'); hud.popup(`불 -${rules.bossSlamFuel}`, { x: world.fire.x, y: 2.4, z: world.fire.z }, camera.cam, 'hurt big'); }
+      else if (msg.k === 'stomp' && near(msg.x, msg.z)) camera.shake = Math.max(camera.shake, 0.6);
+      else if (msg.k === 'revive') { const f = friends.map.get(msg.id); if (f) effects.spawn(f.pos.x, 1.2, f.pos.z, 0xffe27a, { n: 20, speed: 3, up: 5, life: 0.8, size: 0.13, grav: 3 }); }
+      break;
+    case 'shot': {
+      const st = camp.structs.find((q) => q.sid === msg.from), m = bySid.get(msg.to);
+      if (!st || !m) break;
+      const mesh = new THREE.Mesh(arrowGeo, arrowMat);
+      mesh.position.set(st.x, 3.0, st.z);
+      scene.add(mesh);
+      arrows.push({ mesh, vel: new THREE.Vector3(m.pos.x - st.x, 0, m.pos.z - st.z).normalize().multiplyScalar(24), target: m, life: 0.8, by: '망루', visual: true });
+      break;
+    }
+    case 'day': tonight = msg.tonight; break;
+    case 'revived':
+      if (player.dead) {
+        player.dead = false; player.hp = Math.round(player.maxHp * 0.5); player.invuln = 3; player.rig.spin.rotation.z = 0;
+        mp.downT = undefined;
+        hud.banner('일어났다!', `${msg.by} 님이 살려 줬다`, 2.6); sfx('dawn');
+        effects.spawn(player.pos.x, 1.2, player.pos.z, 0xffe27a, { n: 24, speed: 3, up: 6, life: 1, size: 0.13, grav: 3 });
+      }
+      break;
+    default: break;
+  }
+}
+/** a fallen friend within reach (to revive) */
+function downFriend() {
+  if (!mp) return null;
+  return friends.list.find((f) => (f.a & 4) && Math.hypot(f.pos.x - player.pos.x, f.pos.z - player.pos.z) < 2.2) || null;
+}
+
 function bindNet(net) {
+  for (const t of ['b', 'world', 'hurt', 'revived', 'deny']) net.on(t, onServer);
   net.on('join', (m) => { friends.add(m.p); hud.toast(`${m.p.name} 님이 들어왔다 👋`, 2.2); sfx('chest'); })
     .on('p', (m) => friends.update(m))
     .on('leave', (m) => { const f = friends.map.get(m.id); if (f) hud.toast(`${f.name} 님이 나갔다`, 1.8); friends.remove(m.id); })
@@ -194,8 +335,12 @@ async function joinRoom(code, pw) {
   friends.clear();
   for (const p of w.players) friends.add(p);
   $('mp-screen').hidden = true;
+  bySid.clear();
+  monsters.puppet = true;
   startGame(readMpSave(code));
   $('btn-emote').hidden = false;
+  const pend = mp.pending || []; mp.pending = [];
+  for (const m of pend) onServer(m);
   hud.banner(`👫 ${w.room.name || '같이 하기'}`, `방 번호 ${code}${w.room.locked ? ' · 🔒' : ''} · ${friends.count + 1}명`, 3);
 }
 
@@ -207,6 +352,7 @@ async function reconnect(attempt) {
     bindNet(net);
     const w = await net.join(mp.code, mp.pw, meta.outfit);
     mp.net = net; mp.start = w.start;
+    bySid.clear(); monsters.reset();
     friends.clear();
     for (const p of w.players) friends.add(p);
     hud.toast('다시 연결됐다!', 1.6);
@@ -220,6 +366,8 @@ function leaveRoom(toTitle = false) {
   saveGame();
   mp.net.leave();
   mp = null;
+  monsters.puppet = false;
+  bySid.clear();
   friends.clear();
   $('btn-emote').hidden = true;
   $('emote-menu').hidden = true;
@@ -491,7 +639,7 @@ function startGame(save = null) {
     Object.assign(player.stats, save.stats);
     world.setFireLevel(save.fireLv);
     world.fire.fuel = save.fuel;
-    camp.restore(save.camp);
+    if (!mp) camp.restore(save.camp);
     if (!mp) daynight.time = save.t || 0;
     if (save.pos) { player.pos.set(save.pos[0], 0, save.pos[1]); world.resolve(player.pos, 0.42); camera.snap(player.pos); }
     hud.banner(`${day}일째`, '이어서 버텨라', 2.6);
@@ -830,6 +978,15 @@ function openChest(c) {
 
 function tryAction() {
   if (player.attacking || player.rolling) return;
+  const df = downFriend();
+  if (df) {
+    mp.net.send({ t: 'revive', id: df.id });
+    sfx('heal');
+    hud.popup(`${df.name} 살렸다!`, { x: df.pos.x, y: 2.4, z: df.pos.z }, camera.cam, 'heal big');
+    player.stats.revives = (player.stats.revives || 0) + 1;
+    gainXp(15);
+    return;
+  }
   const c = chestNear();
   if (c) { openChest(c); return; }
   const lair = rescuable();
@@ -864,6 +1021,7 @@ function tryAction() {
     const cost = STRUCT[broken.kind].repair;
     if (!canAfford(player.inv, cost)) { hud.toast(`고치려면 ${Object.entries(cost).map(([k, v]) => `${ITEMS[k].name} ${v}`).join(', ')}`, 1.8); sfx('deny'); return; }
     pay(player.inv, cost);
+    if (mp && broken.sid) mp.net.send({ t: 'repair', sid: broken.sid });
     camp.repair(broken);
     sfx('build');
     effects.spawn(broken.x, 0.8, broken.z, 0x9fe08a, { n: 12, speed: 2, up: 4, life: 0.7, size: 0.1, grav: 2 });
@@ -906,6 +1064,7 @@ function tryAction() {
     player.stats.fed += 1;
     const was = world.fire.fuel;
     world.fire.fuel = Math.min(max, world.fire.fuel + rules.fuelPerWood * (1 + player.mods.fuel));
+    if (mp) mp.net.send({ t: 'feed', mul: 1 + player.mods.fuel });
     hud.spend('wood', { x: world.fire.x, y: 0.8, z: world.fire.z }, camera.cam);
     effects.spawn(world.fire.x, 1, world.fire.z, 0xffc25a, { n: 12, speed: 1.5, up: 5, life: 0.7, size: 0.12, grav: 2 });
     hud.popup(was <= 0 ? '불이 다시 붙었다!' : '+불', { x: world.fire.x, y: 2.2, z: world.fire.z }, camera.cam, 'fire');
@@ -916,6 +1075,7 @@ function tryAction() {
     const next = TIERS[up.tier + 1];
     if (!canAfford(player.inv, next.cost)) { hud.toast(`${next.name}로 강화하려면 ${Object.entries(next.cost).map(([k, v]) => `${ITEMS[k].name} ${v}`).join(', ')}`, 2); sfx('deny'); return; }
     pay(player.inv, next.cost);
+    if (mp && up.sid) mp.net.send({ t: 'upgrade', sid: up.sid });
     camp.setTier(up, up.tier + 1);
     up.hp = up.maxHp;
     sfx('build'); sfx('craft');
@@ -962,7 +1122,13 @@ function damageMonster(m, base, { fromX = player.pos.x, fromZ = player.pos.z, kb
   let dmg = base, crit = false;
   dmg = Math.round(dmg * (1 + player.mods.dmg));
   if (canCrit && Math.random() < CRIT_CHANCE + player.mods.crit) { dmg = Math.round(dmg * CRIT_MUL); crit = true; }
-  const killed = m.hit(dmg, fromX, fromZ, kb);
+  let killed;
+  if (mp && m.sid) {
+    mp.net.send({ t: 'hit', sid: m.sid, dmg, kb, x: +fromX.toFixed(2), z: +fromZ.toFixed(2) });
+    m.hit(dmg, fromX, fromZ, kb);
+    if (m.state === 'dying') { m.state = 'chase'; m.t = 0; m.hp = 1; } // the server says when it falls
+    killed = false;
+  } else killed = m.hit(dmg, fromX, fromZ, kb);
   const y = (m.type === 'wisp' ? 1.6 : 2.0 * (m.T.scale || 1));
   hud.popup(crit ? `${dmg} 치명타!` : `${dmg}`, { x: m.pos.x + (Math.random() - 0.5) * 0.6, y, z: m.pos.z }, camera.cam, crit ? 'dmg crit' : 'dmg');
   sfx(killed ? 'kill' : 'hitMonster');
@@ -1036,7 +1202,7 @@ function updateArrows(dt) {
     a.life -= dt;
     for (const m of monsters.alive) {
       if (Math.hypot(m.pos.x - a.mesh.position.x, m.pos.z - a.mesh.position.z) < m.radius + 0.35) {
-        damageMonster(m, a.dmg || WEAPONS.bow.dmg, { kb: 0.4, by: a.by || null, canCrit: !a.by });
+        if (!a.visual) damageMonster(m, a.dmg || WEAPONS.bow.dmg, { kb: 0.4, by: a.by || null, canCrit: !a.by });
         a.life = 0;
         break;
       }
@@ -1158,6 +1324,7 @@ function craft(id) {
   if (id === 'rod') { player.rod = true; show('낚싯대! 물가에서 낚시', 0x7fd3ff); return; }
   if (id === 'fire2' || id === 'fire3') {
     world.setFireLevel(id === 'fire2' ? 1 : 2);
+    if (mp) mp.net.send({ t: 'firelv', lv: world.fire.level });
     world.fire.fuel = Math.min(world.fire.max, world.fire.fuel + 25);
     effects.spawn(world.fire.x, 1, world.fire.z, 0xffb03a, { n: 30, speed: 4, up: 7, life: 1, size: 0.16, grav: 4 });
     camera.shake = 0.6;
@@ -1226,6 +1393,7 @@ function useItem(id) {
   } else if (id === 'charm') {
     player.inv.charm -= 1;
     sfx('charm');
+    if (mp) mp.net.send({ t: 'charm', x: +player.pos.x.toFixed(2), z: +player.pos.z.toFixed(2) });
     const n = monsters.banishNear(player.pos.x, player.pos.z, rules.charmRadius);
     blastT = 0; blast.position.x = player.pos.x; blast.position.z = player.pos.z;
     effects.spawn(player.pos.x, 1, player.pos.z, 0xffd65a, { n: 30, speed: 7, up: 3, life: 0.7, size: 0.14, grav: 2 });
@@ -1254,7 +1422,8 @@ function useItem(id) {
     if (why) { hud.toast(why, 1.4); sfx('deny'); return; }
     sfx('build');
     player.inv[id] -= 1;
-    camp.build(id, x, z, facing);
+    if (mp) mp.net.send({ t: 'build', k: id, x: +x.toFixed(2), z: +z.toFixed(2), f: +facing.toFixed(3) });
+    else camp.build(id, x, z, facing);
     player.stats.built += 1;
     effects.spawn(x, 0.4, z, ['fence', 'jangseung', 'hut', 'trap'].includes(id) ? 0xb07a45 : 0xd6d3cb, { n: 12, speed: 2.5, up: 3, life: 0.6, size: 0.13 });
     camera.shake = Math.max(camera.shake, 0.3);
@@ -1481,7 +1650,7 @@ function tick(dt) {
 
   // fire burns down
   const burn = (phase === 'night' ? rules.burnNight : phase === 'dusk' ? (rules.burnDay + rules.burnNight) / 2 : rules.burnDay) * M().burn * (tonight === 'rain' && darkness > 0.3 ? 1.6 : 1);
-  if (world.fire.fuel > 0) {
+  if (!mp && world.fire.fuel > 0) {
     world.fire.fuel = Math.max(0, world.fire.fuel - burn * gdt);
     if (world.fire.fuel === 0) { hud.toast('모닥불이 꺼졌다! 장작을 넣어!', 3); camera.shake = 0.5; sfx('fireOut'); }
   }
@@ -1517,7 +1686,7 @@ function tick(dt) {
   }
 
   const nightP = phase === 'night' ? daynight.progress() : -1;
-  const events = monsters.update(dt, c, tonight === 'horde' ? -1 : nightP, day);
+  const events = monsters.update(dt, c, mp || tonight === 'horde' ? -1 : nightP, day);
   for (const m of monsters.alive) if (!m.illusion && !dex[m.type] && Math.hypot(m.pos.x - player.pos.x, m.pos.z - player.pos.z) < 13) meet(m.type);
   updateVillage(dt, c, darkness);
   for (const e of dog.update(dt, { player, world, monsters: monsters.alive, darkness })) {
@@ -1525,7 +1694,7 @@ function tick(dt) {
     else if (e.type === 'bark') { if (Math.random() < 0.6) sfx('bark'); }
     else if (e.type === 'tired') hud.popup('헥헥…', { x: dog.pos.x, y: 1.6, z: dog.pos.z }, camera.cam, 'water big');
   }
-  for (const sh of camp.towerShots(dt, monsters.alive, darkness > 0.4)) {
+  for (const sh of mp ? [] : camp.towerShots(dt, monsters.alive, darkness > 0.4)) {
     const s = sh.tower;
     const mesh = new THREE.Mesh(arrowGeo, arrowMat);
     mesh.position.set(s.x, 3.0, s.z);
@@ -1534,7 +1703,7 @@ function tick(dt) {
     arrows.push({ mesh, vel: v, target: sh.m, life: 0.8, dmg: 8 + s.tier * 4, by: '망루' });
     if (Math.hypot(s.x - player.pos.x, s.z - player.pos.z) < 14) sfx('swing');
   }
-  for (const h of camp.springTraps(monsters.alive)) {
+  for (const h of mp ? [] : camp.springTraps(monsters.alive)) {
     effects.spawn(h.trap.x, 0.4, h.trap.z, 0xe8dcc0, { n: 10, speed: 3, up: 3, life: 0.4, size: 0.1 });
     damageMonster(h.m, 20, { fromX: h.trap.x, fromZ: h.trap.z, kb: 0.3, canCrit: false, by: '가시 덫' });
     if (h.trap.hp <= 0) hud.toast('가시 덫이 부서졌다', 1.6);
@@ -1545,6 +1714,7 @@ function tick(dt) {
     else if (e.type === 'wispCharge' && near) sfx('wispCharge');
     else if (e.type === 'wispDash' && near) sfx('wispDash');
     if (e.type === 'stomp' && near) sfx('stomp');
+    if (mp && e.m.sid && e.type !== 'windup') continue; // together: the server decides what this monster's hit does
     if (e.type === 'hitFire') {
       world.fire.fuel = Math.max(0, world.fire.fuel - 4);
       sfx('stomp'); camera.shake = Math.max(camera.shake, 0.5);
@@ -1607,7 +1777,7 @@ function tick(dt) {
     const fr = world.fireRadius();
     eyes.ring(world.fire.x, world.fire.z, fr + 0.8, fr + 3.2, Math.round(5 + dr * 10), dr > 0.5);
     if (tonight === 'horde') {
-      horde.start();
+      if (!mp) horde.start();
       hud.nightIntro('경고! 백귀야행', `${day}일째 밤 · 1번째 물결이 몰려온다! 모닥불을 지켜라`, true, false);
       sfx('raid'); sfx('dread'); sfx('laugh', 0.6, 0.8);
       camera.shake = 1;
@@ -1637,7 +1807,7 @@ function tick(dt) {
       announced.nightChest = true;
       if (camp.spawnChest('night', 15, 26)) hud.toast('멀리서 도깨비 보물 궤짝이 빛난다!', 3);
     }
-    if (bossNight && nightP > rules.bossAt && !announced.boss) {
+    if (!mp && bossNight && nightP > rules.bossAt && !announced.boss) {
       announced.boss = true;
       const bm = monsters.spawnBoss(c, day);
       sfx('raid'); sfx('gong');
@@ -1646,7 +1816,7 @@ function tick(dt) {
       else hud.banner('도깨비 대장이 나타났다!', '불빛에 숨어 있으면 대장이 불을 흔든다', 3, 'raid');
       camera.shake = 1.2;
     }
-    if (!bossNight && tonight !== 'horde' && nightP > rules.raidAt && !announced.raid) {
+    if (!mp && !bossNight && tonight !== 'horde' && nightP > rules.raidAt && !announced.raid) {
       announced.raid = true;
       monsters.raid(c, day);
       sfx('raid');
@@ -1655,7 +1825,7 @@ function tick(dt) {
     }
   }
 
-  const hev = horde.update(dt, { monsters, ctx: c, day });
+  const hev = mp ? null : horde.update(dt, { monsters, ctx: c, day });
   if (hev === 'waveEnd') {
     hud.banner(`${horde.wave}번째 물결을 막았다!`, '잠깐 숨 돌리자… 곧 다음 물결', 2.6);
     sfx('craft');
@@ -1681,7 +1851,13 @@ function tick(dt) {
 
   if (mp && player.dead && !(player.revives > 0)) {
     // together: no game over — get back up at the campfire after a few seconds
-    if (mp.downT === undefined) { mp.downT = 5; hud.banner('쓰러졌다…', '5초 뒤 모닥불 옆에서 일어난다', 3); sfx('lose'); }
+    if (mp.downT === undefined) {
+      const alone = friends.count === 0;
+      mp.downT = alone ? 5 : 20;
+      hud.banner('쓰러졌다…', alone ? '5초 뒤 모닥불 옆에서 일어난다' : '친구가 와서 "살리기"를 누르면 일어난다 (20초)', 3.2);
+      sfx('lose');
+      if (!alone) mp.net.send({ t: 'emote', k: 'help' });
+    }
     mp.downT -= dt;
     if (mp.downT <= 0) {
       mp.downT = undefined;
@@ -1738,7 +1914,7 @@ function tick(dt) {
     torch: player.torchT,
     weapon: player.weapon, weaponCount: player.weapons.length, arrows: player.inv.arrow || 0,
     weaponName: player.weapon === 'axe' ? ['돌도끼', '쇠도끼', '강철도끼'][player.axeLevel] : WEAPONS[player.weapon].name,
-    actionLabel: player.fishT > 0 ? '낚시 중' : chest ? '열기' : dogNear() ? '먹이 주기' : rescuable() ? '구하기' : (village.talkable(player.pos.x, player.pos.z) && !nearFire()) ? '말 걸기' : (camp.repairable(player.pos.x, player.pos.z) && !nearFire()) ? '고치기' : (!nearFire() && upgradeHere()) ? '강화' : canFish() ? '낚시' : canDrink() ? '물 마시기' : bushNear() ? '따기' : nearFire() && player.wood > 0 ? '장작 넣기' : '베기',
+    actionLabel: player.fishT > 0 ? '낚시 중' : downFriend() ? '살리기' : chest ? '열기' : dogNear() ? '먹이 주기' : rescuable() ? '구하기' : (village.talkable(player.pos.x, player.pos.z) && !nearFire()) ? '말 걸기' : (camp.repairable(player.pos.x, player.pos.z) && !nearFire()) ? '고치기' : (!nearFire() && upgradeHere()) ? '강화' : canFish() ? '낚시' : canDrink() ? '물 마시기' : bushNear() ? '따기' : nearFire() && player.wood > 0 ? '장작 넣기' : '베기',
     water: player.water, food: player.food, level: player.level, xp: player.xp, xpNeed: xpNeed(player.level),
     boss: monsters.boss && monsters.boss.alive ? monsters.boss : null,
     rollCool: player.rollCool > 0 || player.rolling, canCraft,
@@ -1759,7 +1935,7 @@ requestAnimationFrame(frame);
 
 // debug handle for automated checks
 window.__game = {
-  get state() { return state; }, get day() { return day; }, critters, eyes, village, dog, horde, meta, player, world, monsters, daynight, camera, input, tune, rules, camp, hud,
+  get state() { return state; }, get day() { return day; }, get mp() { return mp; }, friends, critters, eyes, village, dog, horde, meta, player, world, monsters, daynight, camera, input, tune, rules, camp, hud,
   start: startGame, setTime: (t) => { daynight.time = t; },
   /** advance the game n frames without waiting for the browser (used by automated checks) */
   step: (n = 1, dt = 1 / 60) => { for (let i = 0; i < n; i++) tick(dt); return window.__game.info(); },

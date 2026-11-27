@@ -11,6 +11,7 @@ const mat = (color) => new THREE.MeshLambertMaterial({ color, flatShading: true 
 let _glow = null;
 export function glowTex() {
   if (_glow) return _glow;
+  if (typeof document === 'undefined') return null; // running on the server: no textures needed
   const c = document.createElement('canvas');
   c.width = c.height = 64;
   const g = c.getContext('2d');

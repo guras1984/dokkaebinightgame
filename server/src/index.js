@@ -1,6 +1,8 @@
 // 도깨비 밤 · 같이 하기 서버
 // - Lobby (one object): the list of rooms people can see
 // - Room (one object per room code): who is in the room, the island seed, the shared clock; relays movement
+import { Sim } from './sim.js';
+
 // Kid-safety: no free chat (only preset quick messages), names come from a preset list on the client,
 // passwords are stored hashed.
 
@@ -30,10 +32,11 @@ export default {
       const pw = String(body.password || '').replace(/\D/g, '').slice(0, 6);
       const name = String(body.name || '').slice(0, 24);
       const seed = (Math.random() * 1e9) >>> 0;
+      const t0 = Math.max(0, Math.min(184, +body.t || 0)); // start later in the day (for testing nights)
       for (let i = 0; i < 20; i++) {
         const code = String(1000 + Math.floor(Math.random() * 9000));
         const room = env.ROOM.get(env.ROOM.idFromName(code));
-        const r = await room.fetch('https://x/init', { method: 'POST', body: JSON.stringify({ code, name, pwHash: pw ? await sha(pw) : '', seed, day: 1 }) });
+        const r = await room.fetch('https://x/init', { method: 'POST', body: JSON.stringify({ code, name, pwHash: pw ? await sha(pw) : '', seed, day: 1, t0 }) });
         if (r.ok) {
           await lobby.fetch('https://x/upsert', { method: 'POST', body: JSON.stringify({ code, name, locked: !!pw, n: 0 }) });
           return json({ code });
@@ -97,6 +100,38 @@ export class Room {
     return this.meta;
   }
 
+  /** the shared world runs while anyone is in the room */
+  async ensureSim() {
+    if (!this.sim) {
+      const m = await this.load();
+      if (!m) return null;
+      const saved = await this.state.storage.get('world');
+      this.sim = new Sim(m, saved);
+      this.saveT = Date.now();
+    }
+    if (!this.loop) this.loop = setInterval(() => this.tick(), 100);
+    return this.sim;
+  }
+
+  tick() {
+    const socks = this.state.getWebSockets();
+    if (!socks.length) {
+      clearInterval(this.loop); this.loop = null;
+      if (this.sim) this.state.storage.put('world', this.sim.save());
+      this.sim = null;
+      return;
+    }
+    const players = socks.map((ws) => ws.deserializeAttachment()).filter(Boolean);
+    try { this.sim.step(0.1, players); } catch (err) { console.log('sim error', err && err.stack); }
+    const { all, direct } = this.sim.drain();
+    if (all.length) this.broadcast({ t: 'b', l: all });
+    for (const d of direct) {
+      const ws = socks.find((w) => { const a = w.deserializeAttachment(); return a && a.id === d.to; });
+      if (ws) { try { ws.send(JSON.stringify(d.msg)); } catch { /* gone */ } }
+    }
+    if (Date.now() - this.saveT > 30000) { this.saveT = Date.now(); this.state.storage.put('world', this.sim.save()); }
+  }
+
   players(except) {
     return this.state.getWebSockets().filter((ws) => ws !== except).map((ws) => ws.deserializeAttachment()).filter(Boolean);
   }
@@ -119,7 +154,7 @@ export class Room {
       if (await this.load()) return new Response('taken', { status: 409 });
       const b = await req.json();
       // the shared clock: day 1 starts now; every client computes day/time from start
-      this.meta = { code: b.code, name: b.name, pwHash: b.pwHash, seed: b.seed, startDay: b.day, start: Date.now(), created: Date.now() };
+      this.meta = { code: b.code, name: b.name, pwHash: b.pwHash, seed: b.seed, startDay: b.day, start: Date.now() - (b.t0 || 0) * 1000, created: Date.now() };
       await this.state.storage.put('meta', this.meta);
       return new Response('ok');
     }
@@ -136,7 +171,9 @@ export class Room {
     this.state.acceptWebSocket(server);
     const me = { id: pid, name: NICK_OK.test(nick) ? nick : '도깨비 사냥꾼', look: url.searchParams.get('look') || 'basic', x: 0, z: 2.4, f: 0, s: 0, hp: 100 };
     server.serializeAttachment(me);
+    const sim = await this.ensureSim();
     server.send(JSON.stringify({ t: 'welcome', you: me.id, room: { code: m.code, name: m.name, locked: !!m.pwHash }, seed: m.seed, startDay: m.startDay, start: m.start, now: Date.now(), players: this.players().filter((p) => p.id !== me.id) }));
+    if (sim) server.send(JSON.stringify(sim.welcome()));
     this.broadcast({ t: 'join', p: me }, server);
     await this.report();
     return new Response(null, { status: 101, webSocket: client });
@@ -154,6 +191,14 @@ export class Room {
       this.broadcast({ t: 'p', id: me.id, x: me.x, z: me.z, f: me.f, s: me.s, a: me.a, hp: me.hp, w: me.w, look: me.look }, ws);
     } else if (msg.t === 'emote' && EMOTES.includes(msg.k)) {
       this.broadcast({ t: 'emote', id: me.id, k: msg.k, x: me.x, z: me.z });
+    } else if (msg.t === 'revive') {
+      // pass "you were revived" to the fallen friend
+      const target = this.state.getWebSockets().find((w) => { const a = w.deserializeAttachment(); return a && a.id === msg.id; });
+      if (target) target.send(JSON.stringify({ t: 'revived', by: me.name }));
+      this.broadcast({ t: 'fx', k: 'revive', id: msg.id, by: me.id });
+    } else if (['hit', 'feed', 'firelv', 'build', 'repair', 'upgrade', 'charm'].includes(msg.t)) {
+      const sim = await this.ensureSim();
+      if (sim) sim.handle(me.id, msg);
     } else if (msg.t === 'time') {
       ws.send(JSON.stringify({ t: 'time', now: Date.now() }));
     }
