@@ -5,7 +5,7 @@
 const ua = navigator.userAgent;
 const isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const isAndroid = /Android/.test(ua);
-const inApp = /KAKAOTALK|NAVER\(inapp|Instagram|FBAN|FBAV|Line\/|DaumApps|everytimeApp|SamsungBrowser\/.*CrossApp/i.test(ua);
+const inApp = /KAKAOTALK|NAVER\(inapp|Instagram|FBAN|FBAV|Line\/|DaumApps|everytimeApp/i.test(ua);
 const standalone = () => matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches || navigator.standalone === true;
 
 export function setupInstall() {
@@ -23,7 +23,7 @@ export function setupInstall() {
     if (isIOS && !/KAKAOTALK/i.test(ua)) $('inapp-desc').textContent = '여기서는 설치가 안 돼요. 오른쪽 아래(또는 위) ··· 메뉴에서 "Safari로 열기"를 눌러 주세요';
     $('inapp-btn').onclick = () => {
       if (/KAKAOTALK/i.test(ua)) location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(here);
-      else if (isAndroid) location.href = 'intent://' + here.replace(/^https?:\/\//, '') + '#Intent;scheme=https;package=com.android.chrome;end';
+      else if (isAndroid) location.href = 'intent://' + here.replace(/^https?:\/\//, '') + '#Intent;scheme=https;end'; // the phone's default browser (Samsung Internet or Chrome)
       else alert('··· 메뉴에서 "Safari로 열기"를 눌러 주세요');
     };
     return;
@@ -60,7 +60,7 @@ export function setupInstall() {
     } else if (isIOS) {
       $('ios-guide').hidden = false;
     } else {
-      alert('브라우저 메뉴(⋮)에서 "앱 설치" 또는 "홈 화면에 추가"를 눌러 주세요');
+      alert(/SamsungBrowser/.test(ua) ? '아래 메뉴(≡) → "현재 페이지 추가" → "홈 화면"을 눌러 주세요' : '오른쪽 위 메뉴(⋮) → "앱 설치" 또는 "홈 화면에 추가"를 눌러 주세요');
     }
   };
   $('ios-ok').onclick = () => { $('ios-guide').hidden = true; };
