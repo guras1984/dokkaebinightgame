@@ -472,6 +472,28 @@ function tryAction() {
   if (player.startAttack(aim)) sfx('swing');
 }
 
+// ---------- bestiary (도감): what you have met / beaten, kept across runs ----------
+export const MONSTER_NAMES = { dokkaebi: '도깨비', elite: '큰 도깨비', wisp: '도깨비불', boss: '도깨비 대장', fox: '구미호', centipede: '왕지네', bulgasari: '불가사리', shadow: '어둑시니' };
+const MEET_TIPS = {
+  wisp: '도깨비불! 하얗게 번쩍이면 돌진한다. 구르기로 피하자',
+  elite: '큰 도깨비! 붉은 원 밖으로 피하고, 철퇴가 잘 듣는다',
+  centipede: '왕지네! 몸을 세우면 곧장 돌진한다. 구르기로 넘자',
+  fox: '구미호! 분신을 만든다. 맞으면 사라지는 쪽은 가짜',
+  bulgasari: '불가사리! 지은 것을 먹어 치운다. 막아라',
+  shadow: '어둑시니! 가까울수록 커진다. 횃불이나 불빛으로 녹이자',
+};
+const dex = (() => { try { return JSON.parse(store.get('dokkaebi.dex') || '{}'); } catch { return {}; } })();
+function saveDex() { store.set('dokkaebi.dex', JSON.stringify(dex)); }
+/** first time you see a monster type: short tip */
+function meet(type) {
+  if (!dex[type]) { dex[type] = { met: 1, kills: 0 }; saveDex(); if (MEET_TIPS[type]) hud.toast(MEET_TIPS[type], 3); }
+}
+function seen(type) {
+  meet(type);
+  dex[type].kills = (dex[type].kills || 0) + 1;
+  saveDex();
+}
+
 /** every hit on a monster goes through here: crits, damage numbers, kill rewards */
 function damageMonster(m, base, { fromX = player.pos.x, fromZ = player.pos.z, kb = 1, canCrit = true, by = null } = {}) {
   let dmg = base, crit = false;
@@ -486,7 +508,9 @@ function damageMonster(m, base, { fromX = player.pos.x, fromZ = player.pos.z, kb
 }
 
 function onMonsterKilled(m, by) {
+  if (m.illusion) { hud.popup('환영이었다!', { x: m.pos.x, y: 2.2, z: m.pos.z }, camera.cam, 'water big'); return; }
   player.stats.kills += 1;
+  seen(m.type);
   hud.popup(by ? `${by}!` : m.type === 'elite' ? '큰 도깨비를 물리쳤다!' : '물리쳤다!', { x: m.pos.x, y: 2.6, z: m.pos.z }, camera.cam, 'fire big');
   if (m.type === 'boss') {
     hud.banner('도깨비 대장을 물리쳤다!', player.weapons.includes('club') ? '도깨비들이 겁을 먹었다' : '도깨비 금방망이를 얻었다!', 3);
@@ -979,6 +1003,7 @@ function tick(dt) {
 
   const nightP = phase === 'night' ? daynight.progress() : -1;
   const events = monsters.update(dt, c, tonight === 'horde' ? -1 : nightP, day);
+  for (const m of monsters.alive) if (!m.illusion && !dex[m.type] && Math.hypot(m.pos.x - player.pos.x, m.pos.z - player.pos.z) < 13) meet(m.type);
   updateVillage(dt, c, darkness);
   for (const h of camp.springTraps(monsters.alive)) {
     effects.spawn(h.trap.x, 0.4, h.trap.z, 0xe8dcc0, { n: 10, speed: 3, up: 3, life: 0.4, size: 0.1 });
@@ -1008,7 +1033,7 @@ function tick(dt) {
     }
     if (e.type === 'hitStruct' && e.m.hitTarget) {
       const st = e.m.hitTarget;
-      const broke = camp.damage(st, Math.round(e.m.damage * (e.m.type === 'boss' ? 2 : 1)));
+      const broke = camp.damage(st, e.m.dmgStruct || Math.round(e.m.damage * (e.m.type === 'boss' ? 2 : 1)));
       if (near) sfx(broke ? 'rockBreak' : 'chop');
       effects.spawn(st.x, 0.8, st.z, 0xc98a4d, { n: broke ? 22 : 6, speed: broke ? 5 : 3, up: 4, life: 0.7, size: broke ? 0.18 : 0.1 });
       if (broke) {

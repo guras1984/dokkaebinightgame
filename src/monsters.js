@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { rules, difficulty, MONSTER_TYPES } from './config.js';
 import { buildCharacter, animateCharacter, flash, setMonsterEyes } from './character.js';
+import { makeBeast, Fox, BEAST_TYPES } from './beasts.js';
 
 const angDiff = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
 const SKINS = [0x3d5a9a, 0x8a2a2a, 0x3f6b3a]; // ash blue, dark red, moss green
@@ -359,15 +360,23 @@ export class Monsters {
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0 && this.alive.length < cap) {
         this.spawnTimer = interval;
-        const r = Math.random();
-        const m = this.spawn(ctx, d, r < d.elite ? 'elite' : r < d.elite + d.wisp ? 'wisp' : 'dokkaebi');
+        const m = this.spawn(ctx, d, this.pickType(d, ctx));
         if (this.mod) { m.hp = Math.round(m.hp * this.mod.hpMul); m.maxHp = m.hp; m.damage = Math.round(m.damage * this.mod.dmgMul); m.beadMul = this.mod.beadMul; }
       }
     }
     const events = [];
-    for (const m of this.list) {
+    for (const m of [...this.list]) {
       const e = m.update(dt, ctx);
-      if (e) events.push({ type: e, m });
+      if (e === 'foxClones') {
+        // the fox splits into look-alikes that vanish when struck
+        for (const s of [-1, 1]) {
+          const a = m.facing + s * 1.2;
+          const c = new Fox(this.scene, m.pos.x + Math.sin(a) * 1.6, m.pos.z + Math.cos(a) * 1.6, difficulty(night), true);
+          this.list.push(c);
+        }
+        this.effects.spawn(m.pos.x, 1, m.pos.z, 0xffc080, { n: 14, speed: 3, up: 2, life: 0.6, size: 0.14, grav: -1 });
+        events.push({ type: 'foxClones', m });
+      } else if (e) events.push({ type: e, m });
     }
     // keep monsters from stacking
     const al = this.alive;
@@ -433,8 +442,7 @@ export class Monsters {
       const farFromPlayer = Math.hypot(x - player.pos.x, z - player.pos.z) > 9;
       if (farFromPlayer && !zones.some((s) => Math.hypot(x - s.x, z - s.z) < s.r + 2)) break;
     }
-    const m = type === 'wisp' ? new Wisp(this.scene, x, z, diff) : new Dokkaebi(this.scene, x, z, this.count, type, diff);
-    this.count++;
+    const m = this.create(type, x, z, diff);
     this.effects.spawn(x, 0.6, z, type === 'elite' ? 0xb07aff : 0x6fb8ff, { n: 10, speed: 1.5, up: 3, life: 0.7, size: 0.18, grav: -1 });
     this.list.push(m);
     return m;
@@ -447,10 +455,25 @@ export class Monsters {
   }
 
   /** spawn one monster at (x,z): used by the 백귀야행 waves */
+  create(type, x, z, diff) {
+    const m = BEAST_TYPES[type] ? makeBeast(this.scene, type, x, z, diff)
+      : type === 'wisp' ? new Wisp(this.scene, x, z, diff) : new Dokkaebi(this.scene, x, z, this.count, type, diff);
+    this.count++;
+    return m;
+  }
+
+  /** what to spawn tonight, by the night's odds */
+  pickType(d, ctx) {
+    let r = Math.random();
+    const opts = [['elite', d.elite], ['wisp', d.wisp], ['centipede', d.centipede], ['fox', d.fox],
+      ['shadow', ctx.darkness > 0.6 ? d.shadow : 0], ['bulgasari', this.alive.some((m) => m.type === 'bulgasari') ? 0 : d.bulgasari]];
+    for (const [t, p] of opts) { if (r < p) return t; r -= p; }
+    return 'dokkaebi';
+  }
+
   spawnAt(ctx, night, type, x, z, opts = {}) {
     const d = difficulty(Math.max(1, night));
-    const m = type === 'wisp' ? new Wisp(this.scene, x, z, d) : new Dokkaebi(this.scene, x, z, this.count, type, d);
-    this.count++;
+    const m = this.create(type, x, z, d);
     Object.assign(m, opts);
     if (opts.hpMul) { m.hp = Math.round(m.hp * opts.hpMul); m.maxHp = m.hp; }
     if (opts.dmgMul) m.damage = Math.round(m.damage * opts.dmgMul);

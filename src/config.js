@@ -106,6 +106,11 @@ export function difficulty(n) {
     wisp: Math.min(0.4, 0.1 + k * 0.04),            // a few ghost-fires from the first night
     elite: n >= 2 ? Math.min(0.3, 0.06 + (n - 2) * 0.03) : 0,
     raid: Math.min(16, 2 + n * 1.5),                 // a raid every night, bigger each time
+    // folklore beasts join as the nights go on
+    centipede: n >= 3 ? Math.min(0.14, 0.08 + (n - 3) * 0.01) : 0,
+    fox: n >= 4 ? Math.min(0.16, 0.1 + (n - 4) * 0.01) : 0,
+    shadow: n >= 5 ? 0.08 : 0,
+    bulgasari: n >= 6 ? 0.06 : 0,
     n,
   };
 }

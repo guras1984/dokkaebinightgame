@@ -44,7 +44,8 @@ export class Horde {
         const a = this.dirs[Math.floor(Math.random() * this.dirs.length)] + (Math.random() - 0.5) * 0.6;
         const r = INNER + 1 + Math.random() * 4;
         const roll = Math.random();
-        const type = this.wave >= 2 && roll < 0.12 ? 'elite' : roll < 0.3 ? 'wisp' : 'dokkaebi';
+        const type = this.wave >= 2 && roll < 0.12 ? 'elite' : roll < 0.3 ? 'wisp'
+          : this.wave >= 2 && day >= 4 && roll < 0.42 ? (Math.random() < 0.5 ? 'fox' : 'centipede') : 'dokkaebi';
         monsters.spawnAt(ctx, day, type, Math.sin(a) * r, Math.cos(a) * r, { horde: type !== 'wisp', hpMul: 0.8 });
       }
       if (this.t >= dur && alive === 0) {
