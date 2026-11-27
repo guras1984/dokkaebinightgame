@@ -125,7 +125,17 @@ class Dokkaebi {
           }
         }
       }
-      if (this.state === 'chase') {
+      if (this.state === 'chase' && this.horde) {
+        // 백귀야행: march on the campfire; fight the player only if they stand in the way
+        const fdx = ctx.world.fire.x - this.pos.x, fdz = ctx.world.fire.z - this.pos.z, fd = Math.hypot(fdx, fdz);
+        if (dist < 3.5 && !player.dead) {
+          goal = player.pos;
+          if (dist < T.reach) { this.state = 'windup'; this.t = 0; event = 'windup'; }
+        } else {
+          goal = ctx.world.fire;
+          if (fd < 1.9 + this.radius) { this.state = 'windup'; this.t = 0; this.hitFire = true; event = 'windup'; }
+        }
+      } else if (this.state === 'chase') {
         if (leashed) {
           // lair guards don't chase you across the island
           goal = new THREE.Vector3(this.home.x + Math.sin(this.time * 0.5 + this.speedMul * 7) * 2, 0, this.home.z + Math.cos(this.time * 0.5 + this.speedMul * 7) * 2);
@@ -155,7 +165,8 @@ class Dokkaebi {
         if (this.t >= T.windup) {
           this.state = 'recover'; this.t = 0;
           const ahead = (dx * fx + dz * fz) / (dist || 1);
-          if (dist < T.hitReach && (ahead > 0.3 || this.type === 'boss')) event = 'hitPlayer';
+          if (this.hitFire) { event = 'hitFire'; this.hitFire = false; }
+          else if (dist < T.hitReach && (ahead > 0.3 || this.type === 'boss')) event = 'hitPlayer';
           else if (this.targetStruct) { event = 'hitStruct'; this.hitTarget = this.targetStruct; this.breakCD = 0.6; }
           this.targetStruct = null;
           if (this.type === 'boss') { event = event || (this.slamming ? 'fireSlam' : 'stomp'); this.slamming = false; }
@@ -191,8 +202,8 @@ class Dokkaebi {
       this.pos.addScaledVector(this.knock, dt);
       this.knock.multiplyScalar(Math.pow(0.003, dt));
 
-      // the light burns: push out of every safe circle
-      pushOut(zones, this.pos, 0.4 + this.radius * 0.5);
+      // the light burns: push out of every safe circle (the 백귀야행 pushes straight through)
+      if (!this.horde) pushOut(zones, this.pos, 0.4 + this.radius * 0.5);
       world.resolve(this.pos, this.radius);
       speedRatio = Math.min(1, Math.hypot(this.pos.x - before.x, this.pos.z - before.z) / dt / 4);
     }
@@ -349,7 +360,8 @@ export class Monsters {
       if (this.spawnTimer <= 0 && this.alive.length < cap) {
         this.spawnTimer = interval;
         const r = Math.random();
-        this.spawn(ctx, d, r < d.elite ? 'elite' : r < d.elite + d.wisp ? 'wisp' : 'dokkaebi');
+        const m = this.spawn(ctx, d, r < d.elite ? 'elite' : r < d.elite + d.wisp ? 'wisp' : 'dokkaebi');
+        if (this.mod) { m.hp = Math.round(m.hp * this.mod.hpMul); m.maxHp = m.hp; m.damage = Math.round(m.damage * this.mod.dmgMul); m.beadMul = this.mod.beadMul; }
       }
     }
     const events = [];
@@ -431,6 +443,19 @@ export class Monsters {
   spawnBoss(ctx, night) {
     const m = this.spawn(ctx, difficulty(night), 'boss');
     this.boss = m;
+    return m;
+  }
+
+  /** spawn one monster at (x,z): used by the 백귀야행 waves */
+  spawnAt(ctx, night, type, x, z, opts = {}) {
+    const d = difficulty(Math.max(1, night));
+    const m = type === 'wisp' ? new Wisp(this.scene, x, z, d) : new Dokkaebi(this.scene, x, z, this.count, type, d);
+    this.count++;
+    Object.assign(m, opts);
+    if (opts.hpMul) { m.hp = Math.round(m.hp * opts.hpMul); m.maxHp = m.hp; }
+    if (opts.dmgMul) m.damage = Math.round(m.damage * opts.dmgMul);
+    this.effects.spawn(x, 0.6, z, 0xff4a3a, { n: 8, speed: 1.5, up: 3, life: 0.6, size: 0.16, grav: -1 });
+    this.list.push(m);
     return m;
   }
 

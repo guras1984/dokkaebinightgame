@@ -10,6 +10,8 @@ const palette = {
 };
 
 const DREAD_SKY = C(0x2a0a24);
+const BLOOD_SKY = C(0x4a0808);
+const BLOOD_HEMI = C(0xb03030);
 const DREAD_HEMI = C(0x6a2a52);
 
 export class DayNight {
@@ -18,6 +20,7 @@ export class DayNight {
     this.renderer = renderer;
     this.time = 0;
     this.dread = 0;          // 0..1, set per night by the game
+    this.blood = 0;          // 1 on a blood-moon night
     this.hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
     scene.add(this.hemi);
     this.sun = new THREE.DirectionalLight(0xffffff, 2);
@@ -84,6 +87,12 @@ export class DayNight {
     c.hemiGround.copy(a.hemiGround).lerp(b.hemiGround, k);
     c.sun.copy(a.sun).lerp(b.sun, k);
     c.water.copy(a.water).lerp(b.water, k);
+    // blood moon: everything goes red
+    if (this.blood > 0 && d > 0.3) {
+      const kb = this.blood * (d - 0.3) / 0.7;
+      c.sky.lerp(BLOOD_SKY, kb * 0.75);
+      c.hemiSky.lerp(BLOOD_HEMI, kb * 0.6);
+    }
     // harder nights: the sky and fog bleed toward a sick red-violet
     if (this.dread > 0 && d > 0.5) {
       const kd = this.dread * (d - 0.5) * 2;

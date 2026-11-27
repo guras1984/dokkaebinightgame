@@ -12,6 +12,7 @@ import { Critters } from './critters.js';
 import { Eyes } from './spooky.js';
 import { Village } from './villagers.js';
 import { Minimap } from './minimap.js';
+import { NIGHTS, pickNight, Horde, Rain } from './events.js';
 import { PROLOGUE, campLine } from './story.js';
 import { WEAPONS, WEAPON_ORDER, CRIT_CHANCE, CRIT_MUL, weaponDmg, weaponChop } from './weapons.js';
 import { sfx, unlock, ambience, music, isMuted, setMuted, audioState } from './sound.js';
@@ -41,6 +42,9 @@ const eyes = new Eyes(scene);
 const village = new Village(scene, world, effects);
 village.relayout();
 const minimap = new Minimap();
+const horde = new Horde();
+const rain = new Rain(scene);
+let tonight = 'normal';
 // the torch: one light that follows the player (created up front so shaders don't recompile)
 const torchLight = new THREE.PointLight(0xffb050, 0, 9, 1.5);
 scene.add(torchLight);
@@ -136,6 +140,9 @@ function startGame(save = null) {
   village.relayout();
   minimap.reset();
   if (save && save.explored) minimap.restore(save.explored);
+  horde.reset();
+  tonight = pickNight(day);
+  monsters.mod = null;
   critters.reset();
   critters.repopulate(world, player.pos.x, player.pos.z);
   world.setFireLevel(0);
@@ -253,6 +260,9 @@ function newDay() {
   world.refillBushes();
   critters.repopulate(world, player.pos.x, player.pos.z);
   for (const l of village.lairs) if (l.state === 'guarded') { l.state = 'open'; l.guards = []; }
+  horde.reset();
+  tonight = pickNight(day);
+  monsters.mod = null;
   morningGifts();
   sfx('dawn');
   saveGame();
@@ -487,7 +497,7 @@ function onMonsterKilled(m, by) {
     gain('herb', 2, { x: m.pos.x, y: 1.5, z: m.pos.z }, 700);
     monsters.banishNear(m.pos.x, m.pos.z, 12); // the rest of the night is calmer
   }
-  gain('bead', m.T.beads, { x: m.pos.x, y: 1.2, z: m.pos.z }, 200);
+  gain('bead', Math.round(m.T.beads * (m.beadMul || 1)), { x: m.pos.x, y: 1.2, z: m.pos.z }, 200);
 }
 
 // player arrows (bow)
@@ -739,6 +749,7 @@ function currentGoal(phase, inLight, fireR) {
     return best;
   };
   const night = phase === 'night';
+  if (horde.active) return { text: `백귀야행 ${horde.wave}/${horde.waves} 물결 · 모닥불을 지켜라!`, target: fire, urgent: true };
   if (night && !inLight) return { text: '불빛 안으로 돌아가!', target: fire, urgent: true };
   if (world.fire.fuel < 15 && player.wood > 0) return { text: '모닥불이 꺼져 간다! 장작 넣기', target: fire, urgent: true };
   const follower = village.people.find((v) => v.state === 'follow');
@@ -932,7 +943,7 @@ function tick(dt) {
   world.water.material.color.copy(daynight.col.water);
 
   // fire burns down
-  const burn = (phase === 'night' ? rules.burnNight : phase === 'dusk' ? (rules.burnDay + rules.burnNight) / 2 : rules.burnDay) * M().burn;
+  const burn = (phase === 'night' ? rules.burnNight : phase === 'dusk' ? (rules.burnDay + rules.burnNight) / 2 : rules.burnDay) * M().burn * (tonight === 'rain' && darkness > 0.3 ? 1.6 : 1);
   if (world.fire.fuel > 0) {
     world.fire.fuel = Math.max(0, world.fire.fuel - burn * gdt);
     if (world.fire.fuel === 0) { hud.toast('모닥불이 꺼졌다! 장작을 넣어!', 3); camera.shake = 0.5; sfx('fireOut'); }
@@ -967,7 +978,7 @@ function tick(dt) {
   }
 
   const nightP = phase === 'night' ? daynight.progress() : -1;
-  const events = monsters.update(dt, c, nightP, day);
+  const events = monsters.update(dt, c, tonight === 'horde' ? -1 : nightP, day);
   updateVillage(dt, c, darkness);
   for (const h of camp.springTraps(monsters.alive)) {
     effects.spawn(h.trap.x, 0.4, h.trap.z, 0xe8dcc0, { n: 10, speed: 3, up: 3, life: 0.4, size: 0.1 });
@@ -980,6 +991,12 @@ function tick(dt) {
     else if (e.type === 'wispCharge' && near) sfx('wispCharge');
     else if (e.type === 'wispDash' && near) sfx('wispDash');
     if (e.type === 'stomp' && near) sfx('stomp');
+    if (e.type === 'hitFire') {
+      world.fire.fuel = Math.max(0, world.fire.fuel - 4);
+      sfx('stomp'); camera.shake = Math.max(camera.shake, 0.5);
+      effects.spawn(world.fire.x, 1, world.fire.z, 0xff7a3a, { n: 10, speed: 4, up: 3, life: 0.5, size: 0.13 });
+      hud.popup('불 -4', { x: world.fire.x, y: 2.4, z: world.fire.z }, camera.cam, 'hurt big');
+    }
     if (e.type === 'fireSlam') {
       sfx('stomp');
       camera.shake = 1;
@@ -1032,10 +1049,16 @@ function tick(dt) {
     const dr = dreadFor(day) * M().dread;
     const fr = world.fireRadius();
     eyes.ring(world.fire.x, world.fire.z, fr + 0.8, fr + 3.2, Math.round(5 + dr * 10), dr > 0.5);
-    if (day >= 3 || bossNight) {
+    if (tonight === 'horde') {
+      horde.start();
+      hud.nightIntro('경고! 백귀야행', `${day}일째 밤 · 1번째 물결이 몰려온다! 모닥불을 지켜라`, true, false);
+      sfx('raid'); sfx('dread'); sfx('laugh', 0.6, 0.8);
+      camera.shake = 1;
+    } else if (day >= 3 || bossNight || tonight !== 'normal') {
       // the scary card: black flash, flickering red title, an omen, a cackle in the dark
-      const omen = bossNight ? '대장이 깨어났다. 오늘 밤은 다르다' : OMENS[(day * 7) % OMENS.length];
-      hud.nightIntro(bossNight ? '대장의 밤' : '밤이 왔다', `${day}일째 밤 · ${omen}`, bossNight, EASY());
+      const ev = NIGHTS[tonight];
+      const omen = bossNight ? '대장이 깨어났다. 오늘 밤은 다르다' : tonight !== 'normal' ? ev.desc : OMENS[(day * 7) % OMENS.length];
+      hud.nightIntro(bossNight ? '대장의 밤' : tonight !== 'normal' ? ev.name : '밤이 왔다', `${day}일째 밤 · ${omen}`, bossNight || tonight === 'bloodmoon', EASY());
       if (EASY()) sfx('gong');
       else { sfx('dread'); sfx('laugh', 0.9, 0.85); sfx('laugh', 1.6, 1.15); }
       camera.shake = Math.max(camera.shake, 0.5);
@@ -1045,7 +1068,10 @@ function tick(dt) {
   }
   if (phase === 'dusk' && !announced.dusk) {
     announced.dusk = true; sfx('gong');
-    if (day < 3 && !bossNight) hud.banner(`${day}일째 밤이 온다`, day === 1 ? '도깨비는 불빛 안으로 못 들어온다' : '어제보다 더 많이 온다', 2.6);
+    if (tonight === 'horde') { hud.banner('오늘 밤은 백귀야행!', '온갖 요괴가 모닥불로 몰려온다. 장작과 덫을 준비하자', 3.2, 'raid'); sfx('drum'); }
+    else if (tonight !== 'normal' && tonight !== 'boss') hud.banner(`오늘 밤: ${NIGHTS[tonight].name}`, NIGHTS[tonight].desc, 2.8, tonight === 'bloodmoon' ? 'raid' : '');
+    else if (day < 3 && !bossNight) hud.banner(`${day}일째 밤이 온다`, day === 1 ? '도깨비는 불빛 안으로 못 들어온다' : '어제보다 더 많이 온다', 2.6);
+    monsters.mod = tonight === 'bloodmoon' ? { hpMul: 1.25, dmgMul: 1.3, beadMul: 2 } : null;
   }
   if (phase === 'night') {
     if (day === 2 && nightP > 0.07) beat('wispTip', '도깨비불은 번쩍이면 돌진한다. 구르기로 피하자', 3);
@@ -1060,7 +1086,7 @@ function tick(dt) {
       hud.banner('도깨비 대장이 나타났다!', '불빛에 숨어 있으면 대장이 불을 흔든다', 3, 'raid');
       camera.shake = 1.2;
     }
-    if (!bossNight && nightP > rules.raidAt && !announced.raid) {
+    if (!bossNight && tonight !== 'horde' && nightP > rules.raidAt && !announced.raid) {
       announced.raid = true;
       monsters.raid(c, day);
       sfx('raid');
@@ -1068,6 +1094,29 @@ function tick(dt) {
       camera.shake = 1;
     }
   }
+
+  const hev = horde.update(dt, { monsters, ctx: c, day });
+  if (hev === 'waveEnd') {
+    hud.banner(`${horde.wave}번째 물결을 막았다!`, '잠깐 숨 돌리자… 곧 다음 물결', 2.6);
+    sfx('craft');
+    if (camp.spawnChest('night', 4, 8)) hud.toast('모닥불 근처에 상자가 떨어졌다', 2);
+  } else if (hev === 'nextWave') {
+    hud.banner(`경고! ${horde.wave}번째 물결`, horde.wave === horde.waves ? '마지막 물결이다!' : '더 많이 몰려온다', 2.6, 'raid');
+    sfx('raid'); camera.shake = 0.8;
+  } else if (hev === 'won') {
+    hud.banner('백귀야행을 막아냈다!', '요괴들이 물러갔다. 큰 보상!', 3.2);
+    sfx('dawn');
+    player.stats.hordes = (player.stats.hordes || 0) + 1;
+    gain('bead', 6, { x: player.pos.x, y: 1.4, z: player.pos.z }, 300);
+    gain('charm', 1, { x: player.pos.x, y: 1.4, z: player.pos.z }, 600);
+    camp.spawnChest('night', 4, 8);
+  }
+  rain.update(dt, tonight === 'rain' && darkness > 0.25, player.pos);
+  if (tonight === 'fog' && darkness > 0.2) {
+    scene.fog.near = THREE.MathUtils.lerp(scene.fog.near, 4, darkness);
+    scene.fog.far = THREE.MathUtils.lerp(scene.fog.far, 22, darkness);
+  }
+  daynight.blood = tonight === 'bloodmoon' ? 1 : 0;
 
   if (player.dead) { endGame(false); }
   else if (phase === 'dawn') newDay();
@@ -1082,10 +1131,11 @@ function tick(dt) {
     for (const m of monsters.alive) nd = Math.min(nd, Math.hypot(m.pos.x - player.pos.x, m.pos.z - player.pos.z));
     danger = (0.22 + Math.max(0, (9 - nd) / 9) * 0.65) * Math.min(1, (darkness - 0.4) * 3);
   }
+  if (horde.active && horde.phase === 'wave') danger = Math.max(danger, 0.32 + Math.abs(Math.sin(nowS * 4)) * 0.25); // the whole wave flashes red
   const lowHp = player.hp < 35 ? 0.35 + (1 - player.hp / 35) * 0.6 : 0;
 
   ambience.update(dt, { darkness, fireNear: Math.max(0, 1 - fireDist() / 9), lowHp, playing: true, time: nowS });
-  const fighting = (monsters.boss && monsters.boss.alive) || (phase === 'night' && announced.raid && monsters.alive.length >= 5) || village.lairs.some((l) => l.state === 'guarded' && Math.hypot(l.x - player.pos.x, l.z - player.pos.z) < 14);
+  const fighting = horde.active || (monsters.boss && monsters.boss.alive) || (phase === 'night' && announced.raid && monsters.alive.length >= 5) || village.lairs.some((l) => l.state === 'guarded' && Math.hypot(l.x - player.pos.x, l.z - player.pos.z) < 14);
   music.setMood(fighting ? 'battle' : darkness > 0.5 ? 'night' : 'day');
   music.update();
   const goal = currentGoal(phase, inLight, c.fireR);
