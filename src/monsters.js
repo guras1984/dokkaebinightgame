@@ -416,7 +416,8 @@ export class Monsters {
         x = player.pos.x + Math.cos(a) * r; z = player.pos.z + Math.sin(a) * r;
       }
       const d = Math.hypot(x, z);
-      if (d > 27) { x *= 26 / d; z *= 26 / d; }
+      const RR = rules.islandRadius - 1;
+      if (d > RR) { x *= RR / d; z *= RR / d; }
       const farFromPlayer = Math.hypot(x - player.pos.x, z - player.pos.z) > 9;
       if (farFromPlayer && !zones.some((s) => Math.hypot(x - s.x, z - s.z) < s.r + 2)) break;
     }

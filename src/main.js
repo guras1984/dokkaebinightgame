@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { rules, tune } from './config.js';
 import { Input } from './input.js';
-import { World } from './world.js';
+import { World, REGIONS } from './world.js';
 import { Player } from './player.js';
 import { Monsters } from './monsters.js';
 import { DayNight } from './daynight.js';
@@ -38,6 +38,7 @@ const player = new Player(scene);
 const critters = new Critters(scene);
 const eyes = new Eyes(scene);
 const village = new Village(scene, world, effects);
+village.relayout();
 // the torch: one light that follows the player (created up front so shaders don't recompile)
 const torchLight = new THREE.PointLight(0xffb050, 0, 9, 1.5);
 scene.add(torchLight);
@@ -103,7 +104,7 @@ function readSave() {
 }
 function saveGame() {
   store.set(SAVE_KEY, JSON.stringify({
-    v: 1, day, mode, inv: player.inv, ironAxe: player.ironAxe, axeLevel: player.axeLevel, armor: player.armor, hp: Math.round(player.hp),
+    v: 1, day, mode, seed: world.seed, inv: player.inv, ironAxe: player.ironAxe, axeLevel: player.axeLevel, armor: player.armor, hp: Math.round(player.hp),
     villagers: village.inCamp.map((p) => p.def.id), weapons: player.weapons, weapon: player.weapon, sandals: !!player.sandals, rod: !!player.rod,
     water: Math.round(player.water), food: Math.round(player.food),
     fireLv: world.fire.level, fuel: Math.round(world.fire.fuel), stats: player.stats, camp: camp.serialize(),
@@ -126,13 +127,15 @@ function startGame(save = null) {
   player.reset();
   monsters.reset();
   camp.reset();
-  world.regrow(1, 999, 999);
-  world.refillBushes();
+  // every new run gets its own island; a saved run rebuilds the same one
+  day = save ? save.day : parseInt(params.get('day') || '1', 10);
+  world.day = day;
+  world.generate(save && save.seed ? save.seed : (Math.random() * 1e9) >>> 0);
+  village.relayout();
   critters.reset();
   critters.repopulate(world, player.pos.x, player.pos.z);
   world.setFireLevel(0);
   world.fire.fuel = rules.fireStart;
-  day = parseInt(params.get('day') || '1', 10);
   daynight.time = parseFloat(params.get('t') || '0');   // ?t=150 → start near dusk
   announced = {};
   hitStop = 0;
@@ -249,7 +252,8 @@ function newDay() {
   morningGifts();
   sfx('dawn');
   saveGame();
-  hud.banner(`${survived}일째 밤을 버텼다!`, `꼬끼오! ${day}일째 아침`, 3);
+  const opened = Object.entries(REGIONS).find(([id, r]) => id !== 'home' && r.unlock === day);
+  hud.banner(`${survived}일째 밤을 버텼다!`, opened ? `안개가 걷혔다! ${opened[1].name}이(가) 열렸다` : `꼬끼오! ${day}일째 아침`, 3);
   effects.spawn(player.pos.x, 1.2, player.pos.z, 0xffe27a, { n: 18, speed: 3, up: 5, life: 1, size: 0.14, grav: 3 });
 }
 
@@ -333,7 +337,7 @@ function findTarget(maxDist) {
 const chestNear = () => camp.nearestChest(player.pos.x, player.pos.z, 1.9);
 const rescuable = () => { const l = village.lairNear(player.pos.x, player.pos.z, 2.8); return l && l.state === 'cleared' ? l : null; };
 const canFish = () => player.rod && !(player.fishT > 0) && world.atShore(player.pos.x, player.pos.z) && player.water >= 60;
-const canDrink = () => player.water < 97 && (world.atShore(player.pos.x, player.pos.z) || camp.nearWell(player.pos.x, player.pos.z));
+const canDrink = () => player.water < 97 && (world.atShore(player.pos.x, player.pos.z) || camp.nearWell(player.pos.x, player.pos.z) || world.nearSpring(player.pos.x, player.pos.z));
 const bushNear = () => world.bushes.find((b) => b.ripe && Math.hypot(b.x - player.pos.x, b.z - player.pos.z) < b.r + 1.3);
 
 /** first time you get something, say what it is for */
@@ -424,8 +428,9 @@ function tryAction() {
     const n = world.pickBush(b);
     sfx('eat');
     effects.spawn(b.x, 0.6, b.z, 0xe8344e, { n: 8, speed: 2, up: 3, life: 0.5, size: 0.09 });
-    gain('berry', n, { x: b.x, y: 0.7, z: b.z });
-    hud.popup(`+${n} 산딸기`, { x: b.x, y: 1.8, z: b.z }, camera.cam, 'wood big');
+    const what = b.kind === 'herb' ? 'herb' : 'berry';
+    gain(what, n, { x: b.x, y: 0.7, z: b.z });
+    hud.popup(`+${n} ${what === 'herb' ? '약초' : '산딸기'}`, { x: b.x, y: 1.8, z: b.z }, camera.cam, 'wood big');
     return;
   }
   if (nearFire() && player.wood > 0) {
@@ -735,7 +740,10 @@ function currentGoal(phase, inLight, fireR) {
   const follower = village.people.find((v) => v.state === 'follow');
   if (follower) return { text: `${follower.def.name}을(를) 모닥불까지 데려가기`, target: fire };
   if (night) return { text: '불빛 안에서 새벽까지 버티기', target: null };
-  if (player.water < 30) return { text: '물 마시기 (섬 가장자리 물가)', target: (() => { const d = Math.hypot(P.x, P.z) || 1; return { x: P.x / d * (rules.islandRadius - 0.6), z: P.z / d * (rules.islandRadius - 0.6) }; })(), urgent: player.water < 12 };
+  if (player.water < 30) {
+    const wellsAndSprings = [...world.springs, ...camp.wells];
+    return { text: '물 마시기 (옹달샘·우물·물가)', target: near(wellsAndSprings), urgent: player.water < 12 };
+  }
   if (player.food < 30) {
     if (player.inv.meat || player.inv.berry) return { text: '아이템 칸에서 먹을 것 누르기', target: null, urgent: player.food < 12 };
     return { text: '빨간 열매 덤불에서 산딸기 따기', target: near(world.bushes, (b) => b.ripe), urgent: player.food < 12 };
@@ -907,6 +915,12 @@ function tick(dt) {
     }
   }
   const ev = player.update(dt, wish, world);
+  world.day = day;
+  const bumped = world.fogClamp(player.pos);
+  if (bumped && !announced['fog' + bumped]) {
+    announced['fog' + bumped] = true;
+    hud.toast(`짙은 안개… ${REGIONS[bumped].name}은(는) ${REGIONS[bumped].unlock}일째에 열린다`, 2.6);
+  }
   if (ev === 'strike') resolveStrike();
 
   const phase = daynight.phase();
@@ -920,6 +934,7 @@ function tick(dt) {
     if (world.fire.fuel === 0) { hud.toast('모닥불이 꺼졌다! 장작을 넣어!', 3); camera.shake = 0.5; sfx('fireOut'); }
   }
   world.updateFire(dt, nowS, darkness);
+  world.updateMist(nowS);
   world.updateTrees(dt);
   world.updateRocks(dt);
   world.updateOcclusion(dt, player.pos.x, player.pos.z, camera.back);

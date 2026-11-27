@@ -115,6 +115,7 @@ export class Critters {
       const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
       if (Math.hypot(x - px, z - pz) < 8) continue;
       if (world.colliders.some((c) => Math.hypot(c.x - x, c.z - z) < c.r + 0.8)) continue;
+      if (!world.isOpen(x, z)) continue;
       this.list.push(new Rabbit(this.scene, x, z));
     }
   }

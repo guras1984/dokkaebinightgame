@@ -5,8 +5,8 @@ import { VILLAGERS } from './story.js';
 
 const lam = (color, extra = {}) => new THREE.MeshLambertMaterial({ color, flatShading: true, ...extra });
 const angDiff = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
-const LAIR_ANGLES = [0.75, 2.45, 3.95, 5.4];
-const LAIR_R = 20.5;
+// which region each person is held in
+const LAIR_REGION = { bong: 'home', samwol: 'swamp', musoe: 'rocks', beomsu: 'bamboo' };
 
 /** one villager: caged in a lair → follows the player → lives at the camp */
 class Villager {
@@ -111,16 +111,12 @@ class Lair {
   constructor(scene, world, def, index) {
     this.def = def;
     this.index = index;
-    const a = LAIR_ANGLES[index];
-    this.x = Math.sin(a) * LAIR_R; this.z = Math.cos(a) * LAIR_R;
+    this.x = 0; this.z = 0;
+    this.world = world;
     this.state = 'sealed';   // sealed | open | guarded | cleared | empty
     this.guards = [];
     const g = new THREE.Group();
-    g.position.set(this.x, 0, this.z);
-    g.rotation.y = Math.atan2(-this.x, -this.z); // cage door faces the camp
     this.group = g;
-    // clear the ground around the lair
-    world.clearArea(this.x, this.z, 3.6);
     const dark = lam(0x3b3646), darker = lam(0x2a2633);
     const ground = new THREE.Mesh(new THREE.CircleGeometry(3.2, 20), lam(0x4a3f3a));
     ground.rotation.x = -Math.PI / 2; ground.position.y = 0.02; ground.receiveShadow = true; g.add(ground);
@@ -159,9 +155,18 @@ class Lair {
     const m2 = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.18), mm); this.mark.add(m2);
     this.mark.position.y = 3.0; g.add(this.mark);
     scene.add(g);
-    this.col = { x: this.x, z: this.z, r: 0.95 };
-    world.colliders.push(this.col);
+    this.col = { x: 0, z: 0, r: 0.95 };
     this.time = Math.random() * 5;
+  }
+
+  /** move the lair to its spot on a freshly generated island */
+  place(x, z) {
+    this.x = x; this.z = z;
+    this.group.position.set(x, 0, z);
+    this.group.rotation.y = Math.atan2(-x, -z); // cage door faces the camp
+    this.world.clearArea(x, z, 3.6);
+    this.col = { x, z, r: 0.95 };
+    this.world.colliders.push(this.col);
   }
 
   update(dt, day) {
@@ -194,6 +199,14 @@ export class Village {
     this.arrowMat = lam(0xe8dcc0);
     this.arrowGeo = arrowGeo;
     this.reset();
+  }
+
+  /** put every lair on the current island's lair spots */
+  relayout() {
+    this.lairs.forEach((l) => {
+      const sp = this.world.lairSpots[LAIR_REGION[l.def.id]];
+      l.place(sp.x, sp.z);
+    });
   }
 
   reset() {

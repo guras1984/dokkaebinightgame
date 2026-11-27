@@ -63,6 +63,7 @@ export class Camp {
       const r = Math.min(R, rMin + Math.random() * (rMax - rMin));
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
       if (this.world.colliders.some((c) => Math.hypot(c.x - x, c.z - z) < c.r + pad)) continue;
+      if (!this.world.isOpen(x, z) || this.world.nearSpring(x, z)) continue;
       if (this.chests.some((c) => Math.hypot(c.x - x, c.z - z) < 4)) continue;
       return { x, z };
     }
@@ -137,6 +138,7 @@ export class Camp {
     const R = rules.islandRadius - 0.8;
     const D = STRUCT[kind];
     if (Math.hypot(x, z) > R) return '바다 쪽에는 지을 수 없다';
+    if (this.world.nearSpring(x, z)) return '물 위에는 지을 수 없다';
     if (Math.hypot(x - this.world.fire.x, z - this.world.fire.z) < 1.8 + (kind === 'hut' ? 1.2 : 0)) return '모닥불과 너무 가깝다';
     if (this.world.colliders.some((c) => Math.hypot(c.x - x, c.z - z) < c.r + D.pad)) return '자리가 막혀 있다';
     if (this.structs.filter((s) => s.kind === kind).length >= D.max) return `${D.name}은(는) ${D.max}개까지`;
